@@ -1,6 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { authApi, setCsrf } from '../lib/api.js';
-import { hasPermission } from '../lib/permissions.js';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { authApi, setCsrf } from "../lib/api.js";
+import { hasPermission } from "../lib/permissions.js";
 
 const AuthContext = createContext(null);
 
@@ -32,8 +39,9 @@ export function AuthProvider({ children }) {
     })();
 
     const onUnauthorized = () => setUser(null);
-    window.addEventListener('zoser:unauthorized', onUnauthorized);
-    return () => window.removeEventListener('zoser:unauthorized', onUnauthorized);
+    window.addEventListener("zoser:unauthorized", onUnauthorized);
+    return () =>
+      window.removeEventListener("zoser:unauthorized", onUnauthorized);
   }, []);
 
   // The CSRF cookie/token don't rotate on login/logout (only minted once,
@@ -64,14 +72,17 @@ export function AuthProvider({ children }) {
     [user],
   );
 
-  const value = useMemo(() => ({
-    user,
-    ready,
-    login,
-    logout,
-    refreshUser,
-    can,
-  }), [user, ready, login, logout, refreshUser, can]);
+  const value = useMemo(
+    () => ({
+      user,
+      ready,
+      login,
+      logout,
+      refreshUser,
+      can,
+    }),
+    [user, ready, login, logout, refreshUser, can],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

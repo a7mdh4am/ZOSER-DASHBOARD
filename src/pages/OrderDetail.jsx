@@ -1,50 +1,98 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import {
-  IconChevronL, IconDownload, IconExternal, IconMusic, IconPlus, IconTruck, IconUser, IconWhatsapp,
-} from '../components/Icons.jsx';
-import { Can, CopyButton, Empty, Modal, Spinner, StatusBadge } from '../components/ui.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
-import { useToast } from '../context/ToastContext.jsx';
-import { useAction } from '../hooks/useAction.js';
-import { geoApi, ordersApi, shipmentsApi, themesApi } from '../lib/api.js';
-import { colorHex, fmtDate, fmtProductionDate, money2, statusOf, STATUS_ORDER, waLink } from '../lib/format.js';
+  IconChevronL,
+  IconDownload,
+  IconExternal,
+  IconMusic,
+  IconPlus,
+  IconTruck,
+  IconUser,
+  IconWhatsapp,
+} from "../components/Icons.jsx";
+import {
+  Can,
+  CopyButton,
+  Empty,
+  Modal,
+  Spinner,
+  StatusBadge,
+} from "../components/ui.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+import { useToast } from "../context/ToastContext.jsx";
+import { useAction } from "../hooks/useAction.js";
+import { geoApi, ordersApi, shipmentsApi, themesApi } from "../lib/api.js";
+import {
+  colorHex,
+  fmtDate,
+  fmtProductionDate,
+  money2,
+  statusOf,
+  STATUS_ORDER,
+  waLink,
+} from "../lib/format.js";
 
 const SHIP_STATUS = {
-  active: { label: 'In transit', color: 'var(--st-deposited)' },
-  delivered: { label: 'Delivered', color: 'var(--st-paid)' },
-  returned: { label: 'Returned', color: 'var(--st-pending)' },
-  cancelled: { label: 'Cancelled', color: 'var(--st-cancelled)' },
+  active: { label: "In transit", color: "var(--st-deposited)" },
+  delivered: { label: "Delivered", color: "var(--st-paid)" },
+  returned: { label: "Returned", color: "var(--st-pending)" },
+  cancelled: { label: "Cancelled", color: "var(--st-cancelled)" },
 };
 
 export default function OrderDetail() {
   const { id } = useParams();
 
   const [data, setData] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [shipModal, setShipModal] = useState(false);
 
   const load = useCallback(
-    () => ordersApi.get(id).then(setData).catch((e) => setError(e.message)),
+    () =>
+      ordersApi
+        .get(id)
+        .then(setData)
+        .catch((e) => setError(e.message)),
     [id],
   );
 
   // Another order: drop the previous one's data before fetching.
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset + fetch when the order id changes
-  useEffect(() => { setData(null); setError(''); load(); }, [load]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset + fetch when the order id changes
+    setData(null);
+    setError("");
+    load();
+  }, [load]);
 
   if (error) return <Empty title="Couldn't load this order" hint={error} />;
-  if (!data) return <div style={{ padding: 60 }}><Spinner /></div>;
+  if (!data)
+    return (
+      <div style={{ padding: 60 }}>
+        <Spinner />
+      </div>
+    );
 
-  const { order, items, extras, deposits, financial, shipments, notes, profile } = data;
-  const hasActiveShipment = shipments.some((s) => s.status === 'active');
+  const {
+    order,
+    items,
+    extras,
+    deposits,
+    financial,
+    shipments,
+    notes,
+    profile,
+  } = data;
+  const hasActiveShipment = shipments.some((s) => s.status === "active");
 
   return (
     <div className="stack">
       {/* header */}
       <div className="row wrap">
-        <Link to="/orders" className="btn ghost sm"><IconChevronL /> Orders</Link>
-        <h2 style={{ fontSize: 20 }}>#{order.id} · {order.full_name}</h2>
+        <Link to="/orders" className="btn ghost sm">
+          <IconChevronL /> Orders
+        </Link>
+        <h2 style={{ fontSize: 20 }}>
+          #{order.id} · {order.full_name}
+        </h2>
         <StatusBadge status={order.status} />
         <div className="grow" />
         <span className="small muted">{fmtDate(order.order_time, true)}</span>
@@ -53,9 +101,20 @@ export default function OrderDetail() {
       <div className="detail-grid">
         {/* ============ left column ============ */}
         <div className="stack">
-          <PaymentCard order={order} financial={financial} deposits={deposits} onChanged={load} />
+          <PaymentCard
+            order={order}
+            financial={financial}
+            deposits={deposits}
+            onChanged={load}
+          />
           <ItemsCard items={items} extras={extras} />
-          <CustomizationCard order={order} items={items} products={data.edit_products} cardCount={data.card_count} onChanged={load} />
+          <CustomizationCard
+            order={order}
+            items={items}
+            products={data.edit_products}
+            cardCount={data.card_count}
+            onChanged={load}
+          />
           <NotesCard orderId={order.id} notes={notes} onChanged={load} />
         </div>
 
@@ -71,8 +130,12 @@ export default function OrderDetail() {
               <h3>Shipments</h3>
               <div className="grow" />
               <Can perm="orders.shipment.create">
-                <button className="btn sm primary" onClick={() => setShipModal(true)}>
-                  <IconPlus size={14} /> {hasActiveShipment ? 'Re-ship' : 'Create'}
+                <button
+                  className="btn sm primary"
+                  onClick={() => setShipModal(true)}
+                >
+                  <IconPlus size={14} />{" "}
+                  {hasActiveShipment ? "Re-ship" : "Create"}
                 </button>
               </Can>
             </div>
@@ -91,7 +154,10 @@ export default function OrderDetail() {
           defaultAmount={Math.max(0, financial.remaining)}
           hasActive={hasActiveShipment}
           onClose={() => setShipModal(false)}
-          onDone={() => { setShipModal(false); load(); }}
+          onDone={() => {
+            setShipModal(false);
+            load();
+          }}
         />
       )}
     </div>
@@ -102,7 +168,7 @@ export default function OrderDetail() {
 
 function PaymentCard({ order, financial, deposits, onChanged }) {
   const toast = useToast();
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
 
   const addDeposit = async (e) => {
@@ -110,11 +176,11 @@ function PaymentCard({ order, financial, deposits, onChanged }) {
     setBusy(true);
     try {
       await ordersApi.addDeposit(order.id, Number(amount));
-      toast('Deposit recorded');
-      setAmount('');
+      toast("Deposit recorded");
+      setAmount("");
       onChanged();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
     } finally {
       setBusy(false);
     }
@@ -122,31 +188,53 @@ function PaymentCard({ order, financial, deposits, onChanged }) {
 
   return (
     <div className="card">
-      <div className="card-head"><h3>Payment</h3></div>
+      <div className="card-head">
+        <h3>Payment</h3>
+      </div>
       <div className="card-body">
         <div className="price-rows">
-          <div className="pr"><span className="muted">Subtotal</span><span className="mono">{money2(financial.gross)}</span></div>
+          <div className="pr">
+            <span className="muted">Subtotal</span>
+            <span className="mono">{money2(financial.gross)}</span>
+          </div>
           {financial.discount > 0 && (
             <div className="pr good">
-              <span>Discount{order.applied_coupon ? ` · ${order.applied_coupon}` : ''}</span>
+              <span>
+                Discount
+                {order.applied_coupon ? ` · ${order.applied_coupon}` : ""}
+              </span>
               <span className="mono">−{money2(financial.discount)}</span>
             </div>
           )}
           {financial.shipping != null && (
-            <div className="pr"><span className="muted">Shipping</span><span className="mono">{money2(financial.shipping)}</span></div>
+            <div className="pr">
+              <span className="muted">Shipping</span>
+              <span className="mono">{money2(financial.shipping)}</span>
+            </div>
           )}
-          <div className="pr"><span className="strong">Order total</span><span className="mono strong">{money2(financial.net_total)}</span></div>
+          <div className="pr">
+            <span className="strong">Order total</span>
+            <span className="mono strong">{money2(financial.net_total)}</span>
+          </div>
 
           {deposits.map((d) => (
             <div className="pr good" key={d.id}>
-              <span>Deposit <span className="muted small">· {fmtDate(d.created_at)}</span></span>
+              <span>
+                Deposit{" "}
+                <span className="muted small">· {fmtDate(d.created_at)}</span>
+              </span>
               <span className="mono">−{money2(d.value)}</span>
             </div>
           ))}
 
           <div className="pr total">
             <span>Remaining balance</span>
-            <span className="mono" style={{ color: financial.remaining <= 0 ? 'var(--good)' : undefined }}>
+            <span
+              className="mono"
+              style={{
+                color: financial.remaining <= 0 ? "var(--good)" : undefined,
+              }}
+            >
               {money2(financial.remaining)}
             </span>
           </div>
@@ -165,7 +253,7 @@ function PaymentCard({ order, financial, deposits, onChanged }) {
               required
             />
             <button className="btn primary" disabled={busy || !amount}>
-              {busy ? 'Saving…' : 'Add deposit'}
+              {busy ? "Saving…" : "Add deposit"}
             </button>
           </form>
         </Can>
@@ -179,7 +267,9 @@ function PaymentCard({ order, financial, deposits, onChanged }) {
 function ItemsCard({ items, extras }) {
   return (
     <div className="card">
-      <div className="card-head"><h3>Cards & extras</h3></div>
+      <div className="card-head">
+        <h3>Cards & extras</h3>
+      </div>
       <div className="card-body stack">
         {items.length > 0 && (
           <div className="items-grid">
@@ -187,23 +277,56 @@ function ItemsCard({ items, extras }) {
               <div className="item-cell" key={i}>
                 {it.full_image_url ? (
                   <a href={it.full_image_url} target="_blank" rel="noreferrer">
-                    <img className="item-thumb" src={it.full_image_url} alt={it.name} loading="lazy" />
+                    <img
+                      className="item-thumb"
+                      src={it.full_image_url}
+                      alt={it.name}
+                      loading="lazy"
+                    />
                   </a>
                 ) : (
-                  <div className="item-thumb" style={{ display: 'grid', placeItems: 'center', color: 'var(--ink-3)' }}>No image</div>
+                  <div
+                    className="item-thumb"
+                    style={{
+                      display: "grid",
+                      placeItems: "center",
+                      color: "var(--ink-3)",
+                    }}
+                  >
+                    No image
+                  </div>
                 )}
                 <div className="in">
-                  <span>{it.name}<CopyButton text={it.name} label={'Name'} /></span>
+                  <span>
+                    {it.name}
+                    <CopyButton text={it.name} label={"Name"} />
+                  </span>
                 </div>
                 <div className="row" style={{ gap: 6, marginTop: 2 }}>
-                  {it.color &&
-                  <>
-                  <span className="color-dot" style={{ background: colorHex(it.color) || 'var(--surface-2)' }} title={it.color} />
-                  <span className="small muted">{it.color}</span>
-                  </>
-                  }
+                  {it.color && (
+                    <>
+                      <span
+                        className="color-dot"
+                        style={{
+                          background: colorHex(it.color) || "var(--surface-2)",
+                        }}
+                        title={it.color}
+                      />
+                      <span className="small muted">{it.color}</span>
+                    </>
+                  )}
                   {it.full_image_url && (
-                    <a className="small" style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 4 }} href={it.full_image_url} download>
+                    <a
+                      className="small"
+                      style={{
+                        color: "var(--accent)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                      href={it.full_image_url}
+                      download
+                    >
                       <IconDownload size={12} /> Download
                     </a>
                   )}
@@ -215,7 +338,9 @@ function ItemsCard({ items, extras }) {
 
         {extras.length > 0 && (
           <div>
-            <div className="small strong muted" style={{ marginBottom: 6 }}>Add-ons</div>
+            <div className="small strong muted" style={{ marginBottom: 6 }}>
+              Add-ons
+            </div>
             <div className="price-rows">
               {extras.map((x, i) => (
                 <div className="pr" key={i}>
@@ -238,10 +363,10 @@ function ItemsCard({ items, extras }) {
 function CustomizationCard({ order, items, products, cardCount, onChanged }) {
   const [editing, setEditing] = useState(false);
   const fields = [
-    ['Design', order.product_name],
-    ['Group name', order.group_name],
-    ['Anniversary date', order.date ? fmtProductionDate(order.date) : null],
-    ['Addr', order.addr],
+    ["Design", order.product_name],
+    ["Group name", order.group_name],
+    ["Anniversary date", order.date ? fmtProductionDate(order.date) : null],
+    ["Addr", order.addr],
   ].filter(([, v]) => v);
 
   return (
@@ -250,14 +375,22 @@ function CustomizationCard({ order, items, products, cardCount, onChanged }) {
         <h3>Customization</h3>
         <div className="grow" />
         <Can perm="orders.details.update">
-          <button className="btn sm ghost" onClick={() => setEditing(true)}>Edit</button>
+          <button className="btn sm ghost" onClick={() => setEditing(true)}>
+            Edit
+          </button>
         </Can>
       </div>
       {editing && (
         <EditDesignModal
-          order={order} items={items || []} products={products || []} cardCount={cardCount}
+          order={order}
+          items={items || []}
+          products={products || []}
+          cardCount={cardCount}
           onClose={() => setEditing(false)}
-          onDone={() => { setEditing(false); onChanged(); }}
+          onDone={() => {
+            setEditing(false);
+            onChanged();
+          }}
         />
       )}
       <div className="card-body stack">
@@ -265,7 +398,10 @@ function CustomizationCard({ order, items, products, cardCount, onChanged }) {
           {fields.map(([k, v]) => (
             <div className="kv-item" key={k}>
               <div className="k">{k}</div>
-              <div className="v copy-line">{v}<CopyButton text={v} label={k} /></div>
+              <div className="v copy-line">
+                {v}
+                <CopyButton text={v} label={k} />
+              </div>
             </div>
           ))}
           {order.song && (
@@ -273,7 +409,14 @@ function CustomizationCard({ order, items, products, cardCount, onChanged }) {
               <div className="k">Song</div>
               <div className="v copy-line">
                 <IconMusic />
-                <a href={order.song} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', overflowWrap: 'anywhere' }}>{order.song}</a>
+                <a
+                  href={order.song}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: "var(--accent)", overflowWrap: "anywhere" }}
+                >
+                  {order.song}
+                </a>
                 <CopyButton text={order.song} label="song URL" />
               </div>
             </div>
@@ -281,7 +424,10 @@ function CustomizationCard({ order, items, products, cardCount, onChanged }) {
           {order.notes && (
             <div className="kv-item full">
               <div className="k">Customer notes</div>
-              <div className="v copy-line" style={{ whiteSpace: 'pre-wrap' }}>{order.notes}<CopyButton text={order.notes} label="notes" /></div>
+              <div className="v copy-line" style={{ whiteSpace: "pre-wrap" }}>
+                {order.notes}
+                <CopyButton text={order.notes} label="notes" />
+              </div>
             </div>
           )}
         </div>
@@ -295,7 +441,7 @@ function NotesCard({ orderId, notes, onChanged }) {
   const [adding, setAdding] = useState(false);
 
   // Nothing to show and nothing to add → don't render an empty card.
-  if (!notes.length && !can('production.notes.add')) return null;
+  if (!notes.length && !can("production.notes.add")) return null;
 
   return (
     <div className="card">
@@ -303,36 +449,62 @@ function NotesCard({ orderId, notes, onChanged }) {
         <h3>Production notes</h3>
         <div className="grow" />
         <Can perm="production.notes.add">
-          <button className="btn sm primary" onClick={() => setAdding(true)}><IconPlus size={14} /> Add note</button>
+          <button className="btn sm primary" onClick={() => setAdding(true)}>
+            <IconPlus size={14} /> Add note
+          </button>
         </Can>
       </div>
       {adding && (
         <NoteModal
           orderId={orderId}
           onClose={() => setAdding(false)}
-          onDone={() => { setAdding(false); onChanged(); }}
+          onDone={() => {
+            setAdding(false);
+            onChanged();
+          }}
         />
       )}
       <div className="card-body">
         {notes.length === 0 ? (
-          <div className="small muted">No production notes yet. Add one when the customer sends updates after ordering.</div>
+          <div className="small muted">
+            No production notes yet. Add one when the customer sends updates
+            after ordering.
+          </div>
         ) : (
           <div className="timeline">
             {notes.map((n, i) => (
               <div className="tl-item" key={i}>
-                <div className="tl-rail"><div className="tl-dot" style={{ '--tl-c': 'var(--st-production)' }} /><div className="tl-line" /></div>
+                <div className="tl-rail">
+                  <div
+                    className="tl-dot"
+                    style={{ "--tl-c": "var(--st-production)" }}
+                  />
+                  <div className="tl-line" />
+                </div>
                 <div className="grow">
-                  <div style={{ whiteSpace: 'pre-wrap' }}>{n.edits}</div>
+                  <div style={{ whiteSpace: "pre-wrap" }}>{n.edits}</div>
                   {n.images?.length > 0 && (
                     <div className="row wrap" style={{ gap: 10, marginTop: 2 }}>
                       {n.images.map((img, imgIdx) => (
-                        <a key={imgIdx} className="small" style={{ color: 'var(--accent)' }} href={img.image_url} target="_blank" rel="noreferrer">
-                          Attachment {n.images.length > 1 ? imgIdx + 1 : ''} <IconExternal size={11} />
+                        <a
+                          key={imgIdx}
+                          className="small"
+                          style={{ color: "var(--accent)" }}
+                          href={img.image_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Attachment {n.images.length > 1 ? imgIdx + 1 : ""}{" "}
+                          <IconExternal size={11} />
                         </a>
                       ))}
                     </div>
                   )}
-                  {n.created_at && <div className="small muted">{fmtDate(n.created_at, true)}</div>}
+                  {n.created_at && (
+                    <div className="small muted">
+                      {fmtDate(n.created_at, true)}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -346,7 +518,7 @@ function NotesCard({ orderId, notes, onChanged }) {
 /** Add a production note with optional image attachments (multipart). */
 function NoteModal({ orderId, onClose, onDone }) {
   const toast = useToast();
-  const [edits, setEdits] = useState('');
+  const [edits, setEdits] = useState("");
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
 
@@ -354,38 +526,62 @@ function NoteModal({ orderId, onClose, onDone }) {
     setBusy(true);
     try {
       const fd = new FormData();
-      fd.append('edits', edits);
-      files.forEach((f) => fd.append('photos', f));
+      fd.append("edits", edits);
+      files.forEach((f) => fd.append("photos", f));
       await ordersApi.addNote(orderId, fd);
-      toast('Production note added');
+      toast("Production note added");
       onDone();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
       setBusy(false);
     }
   };
 
   return (
-    <Modal title="Add production note" onClose={onClose}
-      footer={(
+    <Modal
+      title="Add production note"
+      onClose={onClose}
+      footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit} disabled={busy || !edits.trim()}>
-            {busy ? 'Saving…' : 'Save note'}
+          <button className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            onClick={submit}
+            disabled={busy || !edits.trim()}
+          >
+            {busy ? "Saving…" : "Save note"}
           </button>
         </>
-      )}>
+      }
+    >
       <div className="stack" style={{ gap: 14 }}>
         <label className="field">
           <span>Note — what the customer needs / changed</span>
-          <textarea className="input" rows={4} value={edits} onChange={(e) => setEdits(e.target.value)}
-            placeholder="e.g. Customer asked to change the boy's name spelling and the song link." autoFocus />
+          <textarea
+            className="input"
+            rows={4}
+            value={edits}
+            onChange={(e) => setEdits(e.target.value)}
+            placeholder="e.g. Customer asked to change the boy's name spelling and the song link."
+            autoFocus
+          />
         </label>
         <label className="field">
           <span>Attachments (optional — PNG, JPG, WebP or GIF)</span>
-          <input className="input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple
-            onChange={(e) => setFiles(Array.from(e.target.files || []))} />
-          {files.length > 0 && <span className="small muted">{files.length} file{files.length === 1 ? '' : 's'} selected</span>}
+          <input
+            className="input"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            onChange={(e) => setFiles(Array.from(e.target.files || []))}
+          />
+          {files.length > 0 && (
+            <span className="small muted">
+              {files.length} file{files.length === 1 ? "" : "s"} selected
+            </span>
+          )}
         </label>
       </div>
     </Modal>
@@ -403,7 +599,7 @@ function StatusCard({ order, onChanged }) {
   // Node's flat permission model has no per-status target restriction —
   // orders.status.update allows setting any status.
   const cur = String(order.status);
-  const options = can('orders.status.update') ? STATUS_ORDER : [cur];
+  const options = can("orders.status.update") ? STATUS_ORDER : [cur];
   const canSetAny = options.some((s) => String(s) !== cur);
   if (!canSetAny) return null;
 
@@ -414,7 +610,7 @@ function StatusCard({ order, onChanged }) {
       toast(`Status updated to ${statusOf(value).label}`);
       onChanged();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
     } finally {
       setBusy(false);
     }
@@ -422,15 +618,27 @@ function StatusCard({ order, onChanged }) {
 
   return (
     <div className="card">
-      <div className="card-head"><h3>Order status</h3></div>
+      <div className="card-head">
+        <h3>Order status</h3>
+      </div>
       <div className="card-body row">
-        <select className="input" value={value} onChange={(e) => setValue(e.target.value)}>
+        <select
+          className="input"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        >
           {options.map((s) => (
-            <option key={s} value={s}>{statusOf(s).label}</option>
+            <option key={s} value={s}>
+              {statusOf(s).label}
+            </option>
           ))}
         </select>
-        <button className="btn primary" onClick={save} disabled={busy || value === String(order.status)}>
-          {busy ? '…' : 'Update'}
+        <button
+          className="btn primary"
+          onClick={save}
+          disabled={busy || value === String(order.status)}
+        >
+          {busy ? "…" : "Update"}
         </button>
       </div>
     </div>
@@ -461,12 +669,14 @@ function ProfileCard({ orderId, profile, onChanged }) {
       const res = await themesApi.assign({
         username: profile.username,
         themeId: t.theme_id,
-        action: t.status === 'owned' ? 'remove' : 'assign',
+        action: t.status === "owned" ? "remove" : "assign",
       });
-      toast(t.status === 'owned' ? `${t.theme} removed` : `${t.theme} assigned`);
+      toast(
+        t.status === "owned" ? `${t.theme} removed` : `${t.theme} assigned`,
+      );
       setThemes(res.themes);
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
     }
   });
 
@@ -476,10 +686,10 @@ function ProfileCard({ orderId, profile, onChanged }) {
       const res = await ordersApi.createProfile(orderId);
       setCreatedLink(res.link);
       setTempPassword(res.temporaryPassword);
-      toast('Profile created');
+      toast("Profile created");
       onChanged();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
     } finally {
       setBusy(false);
     }
@@ -487,18 +697,51 @@ function ProfileCard({ orderId, profile, onChanged }) {
 
   return (
     <div className="card">
-      <div className="card-head"><IconUser /><h3>Card profile</h3></div>
+      <div className="card-head">
+        <IconUser />
+        <h3>Card profile</h3>
+      </div>
       <div className="card-body stack" style={{ gap: 10 }}>
-        <div className="small muted">Username: <span className="mono strong" style={{ color: 'var(--ink)' }}>{profile.username}</span></div>
+        <div className="small muted">
+          Username:{" "}
+          <span className="mono strong" style={{ color: "var(--ink)" }}>
+            {profile.username}
+          </span>
+        </div>
         {link ? (
           <>
-            <div className="copy-line" style={{ background: 'var(--surface-2)', borderRadius: 8, padding: '8px 10px', width: '100%' }}>
-              <span className="small mono grow" style={{ overflowWrap: 'anywhere' }}>{link}</span>
+            <div
+              className="copy-line"
+              style={{
+                background: "var(--surface-2)",
+                borderRadius: 8,
+                padding: "8px 10px",
+                width: "100%",
+              }}
+            >
+              <span
+                className="small mono grow"
+                style={{ overflowWrap: "anywhere" }}
+              >
+                {link}
+              </span>
               <CopyButton text={link} label="profile link" />
             </div>
             {tempPassword && (
-              <div className="copy-line" style={{ background: 'var(--warn-soft, #fff3cd)', borderRadius: 8, padding: '8px 10px', width: '100%' }}>
-                <span className="small">Temporary password: <span className="mono strong">{tempPassword}</span> — save it now, it won't be shown again.</span>
+              <div
+                className="copy-line"
+                style={{
+                  background: "var(--warn-soft, #fff3cd)",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  width: "100%",
+                }}
+              >
+                <span className="small">
+                  Temporary password:{" "}
+                  <span className="mono strong">{tempPassword}</span> — save it
+                  now, it won't be shown again.
+                </span>
                 <CopyButton text={tempPassword} label="temporary password" />
               </div>
             )}
@@ -508,13 +751,22 @@ function ProfileCard({ orderId, profile, onChanged }) {
             {themes.length > 0 && (
               <Can perm="profiles.themes.add">
                 <div>
-                  <div className="small strong muted" style={{ margin: '6px 0' }}>PROFILE THEMES — click to assign / remove</div>
+                  <div
+                    className="small strong muted"
+                    style={{ margin: "6px 0" }}
+                  >
+                    PROFILE THEMES — click to assign / remove
+                  </div>
                   <div className="row wrap" style={{ gap: 6 }}>
                     {themes.map((t) => (
-                      <button key={t.theme_id} type="button"
-                        className={`chip${t.status === 'owned' ? ' active' : ''}`}
-                        onClick={() => toggleTheme(t)}>
-                        {t.status === 'owned' ? '✓ ' : ''}{t.theme}
+                      <button
+                        key={t.theme_id}
+                        type="button"
+                        className={`chip${t.status === "owned" ? " active" : ""}`}
+                        onClick={() => toggleTheme(t)}
+                      >
+                        {t.status === "owned" ? "✓ " : ""}
+                        {t.theme}
                       </button>
                     ))}
                   </div>
@@ -523,9 +775,14 @@ function ProfileCard({ orderId, profile, onChanged }) {
             )}
           </>
         ) : (
-          <Can perm="profiles.create" fallback={<div className="small muted">No profile card created yet.</div>}>
+          <Can
+            perm="profiles.create"
+            fallback={
+              <div className="small muted">No profile card created yet.</div>
+            }
+          >
             <button className="btn primary" onClick={create} disabled={busy}>
-              {busy ? 'Creating…' : 'Create profile & get link'}
+              {busy ? "Creating…" : "Create profile & get link"}
             </button>
           </Can>
         )}
@@ -544,28 +801,44 @@ function CustomerCard({ order, onChanged }) {
         <h3>Customer</h3>
         <div className="grow" />
         <Can perm="orders.customer_info.update">
-          <button className="btn sm ghost" onClick={() => setEditing(true)}>Edit</button>
+          <button className="btn sm ghost" onClick={() => setEditing(true)}>
+            Edit
+          </button>
         </Can>
       </div>
       {editing && (
         <EditContactModal
           order={order}
           onClose={() => setEditing(false)}
-          onDone={() => { setEditing(false); onChanged(); }}
+          onDone={() => {
+            setEditing(false);
+            onChanged();
+          }}
         />
       )}
       <div className="card-body">
-        <div className="kv" style={{ gridTemplateColumns: '1fr' }}>
+        <div className="kv" style={{ gridTemplateColumns: "1fr" }}>
           <div className="kv-item">
             <div className="k">Name</div>
-            <div className="v copy-line">{order.full_name}<CopyButton text={order.full_name} label="name" /></div>
+            <div className="v copy-line">
+              {order.full_name}
+              <CopyButton text={order.full_name} label="name" />
+            </div>
           </div>
           <div className="kv-item">
             <div className="k">Phone</div>
             <div className="v copy-line">
               {order.phone}
               <CopyButton text={order.phone} label="phone" />
-              <a className="copy-btn" style={{ color: 'var(--st-shipped)' }} href={waLink(order.phone)} target="_blank" rel="noreferrer" title="WhatsApp" aria-label="Message on WhatsApp">
+              <a
+                className="copy-btn"
+                style={{ color: "var(--st-shipped)" }}
+                href={waLink(order.phone)}
+                target="_blank"
+                rel="noreferrer"
+                title="WhatsApp"
+                aria-label="Message on WhatsApp"
+              >
                 <IconWhatsapp />
               </a>
             </div>
@@ -574,7 +847,10 @@ function CustomerCard({ order, onChanged }) {
             <div className="k">Address</div>
             <div className="v copy-line">
               {order.address}, {order.city}, {order.zone}
-              <CopyButton text={`${order.address}, ${order.city}, ${order.zone}`} label="address" />
+              <CopyButton
+                text={`${order.address}, ${order.city}, ${order.zone}`}
+                label="address"
+              />
             </div>
           </div>
         </div>
@@ -588,12 +864,20 @@ function EditContactModal({ order, onClose, onDone }) {
   const toast = useToast();
   const [cities, setCities] = useState([]);
   const [form, setForm] = useState({
-    phone: order.phone || '', address: order.address || '', cityId: order.city_id || '', zoneId: order.zone_id || '',
+    phone: order.phone || "",
+    address: order.address || "",
+    cityId: order.city_id || "",
+    zoneId: order.zone_id || "",
   });
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-  useEffect(() => { geoApi.cities().then((d) => setCities(d.cities)).catch(() => setCities([])); }, []);
+  useEffect(() => {
+    geoApi
+      .cities()
+      .then((d) => setCities(d.cities))
+      .catch(() => setCities([]));
+  }, []);
 
   const selectedCity = cities.find((c) => String(c.id) === String(form.cityId));
 
@@ -606,46 +890,83 @@ function EditContactModal({ order, onClose, onDone }) {
         cityId: form.cityId ? Number(form.cityId) : undefined,
         zoneId: form.zoneId ? Number(form.zoneId) : undefined,
       });
-      toast('Customer details updated');
+      toast("Customer details updated");
       onDone();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
       setBusy(false);
     }
   };
 
   return (
-    <Modal title="Edit customer details" onClose={onClose}
-      footer={(
+    <Modal
+      title="Edit customer details"
+      onClose={onClose}
+      footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit} disabled={busy || !form.phone.trim() || !form.address.trim()}>
-            {busy ? 'Saving…' : 'Save changes'}
+          <button className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            onClick={submit}
+            disabled={busy || !form.phone.trim() || !form.address.trim()}
+          >
+            {busy ? "Saving…" : "Save changes"}
           </button>
         </>
-      )}>
+      }
+    >
       <div className="stack" style={{ gap: 14 }}>
         <label className="field">
           <span>Phone</span>
-          <input className="input" value={form.phone} onChange={set('phone')} autoFocus />
+          <input
+            className="input"
+            value={form.phone}
+            onChange={set("phone")}
+            autoFocus
+          />
         </label>
         <label className="field">
           <span>Address</span>
-          <input className="input" value={form.address} onChange={set('address')} />
+          <input
+            className="input"
+            value={form.address}
+            onChange={set("address")}
+          />
         </label>
         <div className="grid-2" style={{ gap: 12 }}>
           <label className="field">
             <span>City</span>
-            <select className="input" value={form.cityId} onChange={(e) => setForm({ ...form, cityId: e.target.value, zoneId: '' })}>
+            <select
+              className="input"
+              value={form.cityId}
+              onChange={(e) =>
+                setForm({ ...form, cityId: e.target.value, zoneId: "" })
+              }
+            >
               <option value="">— select —</option>
-              {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {cities.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
           </label>
           <label className="field">
             <span>Zone</span>
-            <select className="input" value={form.zoneId} onChange={set('zoneId')} disabled={!selectedCity}>
+            <select
+              className="input"
+              value={form.zoneId}
+              onChange={set("zoneId")}
+              disabled={!selectedCity}
+            >
               <option value="">— select —</option>
-              {(selectedCity?.zones ?? []).map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+              {(selectedCity?.zones ?? []).map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.name}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -659,24 +980,40 @@ function EditContactModal({ order, onClose, onDone }) {
  * auto-suggests the tier price for this order's card count; the price
  * stays editable so the admin has the final say.
  */
-function EditDesignModal({ order, items, products, cardCount, onClose, onDone }) {
+function EditDesignModal({
+  order,
+  items,
+  products,
+  cardCount,
+  onClose,
+  onDone,
+}) {
   const toast = useToast();
   const [form, setForm] = useState({
-    product_id: String(order.product_id || ''),
-    price: order.price != null ? String(order.price) : '',
-    group_name: order.group_name || '',
-    date: order.date ? String(order.date).slice(0, 10) : '',
-    addr: order.addr || '',
-    song: order.song || '',
-    notes: order.notes || '',
+    product_id: String(order.product_id || ""),
+    price: order.price != null ? String(order.price) : "",
+    group_name: order.group_name || "",
+    date: order.date ? String(order.date).slice(0, 10) : "",
+    addr: order.addr || "",
+    song: order.song || "",
+    notes: order.notes || "",
   });
   // Per-card name + colour come from order_list now (was orders.bcolor/gcolor).
-  const [cards, setCards] = useState(() => items.map((it) => ({ id: it.id, name: it.name || '', color: it.color || '' })));
+  const [cards, setCards] = useState(() =>
+    items.map((it) => ({
+      id: it.id,
+      name: it.name || "",
+      color: it.color || "",
+    })),
+  );
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-  const setCard = (idx, key, val) => setCards((cs) => cs.map((c, i) => (i === idx ? { ...c, [key]: val } : c)));
+  const setCard = (idx, key, val) =>
+    setCards((cs) => cs.map((c, i) => (i === idx ? { ...c, [key]: val } : c)));
 
-  const selProduct = products.find((x) => String(x.id) === String(form.product_id));
+  const selProduct = products.find(
+    (x) => String(x.id) === String(form.product_id),
+  );
   const colorOptions = selProduct?.colors || [];
   // Group name only matters for friends designs (3+ cards) — couples (2)
   // don't use it. No more products.category to key off; card count is the
@@ -685,21 +1022,39 @@ function EditDesignModal({ order, items, products, cardCount, onClose, onDone })
 
   const tierPrice = (productId) => {
     const p = products.find((x) => String(x.id) === String(productId));
-    return p?.prices?.find((r) => Number(r.friends_count) === Number(cardCount))?.price;
+    return p?.prices?.find((r) => Number(r.friends_count) === Number(cardCount))
+      ?.price;
   };
 
-  const hexFor = (name) => colorOptions.find((c) => c.name === name)?.hex || colorHex(name) || 'transparent';
+  const hexFor = (name) =>
+    colorOptions.find((c) => c.name === name)?.hex ||
+    colorHex(name) ||
+    "transparent";
 
   const colorSelect = (value, onChange) => {
     const names = colorOptions.map((c) => c.name);
     const missing = value && !names.includes(value);
     return (
       <div className="row" style={{ gap: 8 }}>
-        <span className="color-dot" style={{ background: hexFor(value), width: 18, height: 18, flex: '0 0 auto' }} />
+        <span
+          className="color-dot"
+          style={{
+            background: hexFor(value),
+            width: 18,
+            height: 18,
+            flex: "0 0 auto",
+          }}
+        />
         <select className="input" value={value} onChange={onChange}>
           <option value="">— none —</option>
-          {colorOptions.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-          {missing && <option value={value}>{value} (not in this design)</option>}
+          {colorOptions.map((c) => (
+            <option key={c.name} value={c.name}>
+              {c.name}
+            </option>
+          ))}
+          {missing && (
+            <option value={value}>{value} (not in this design)</option>
+          )}
         </select>
       </div>
     );
@@ -708,7 +1063,11 @@ function EditDesignModal({ order, items, products, cardCount, onClose, onDone })
   const onProduct = (e) => {
     const product_id = e.target.value;
     const suggested = tierPrice(product_id);
-    setForm((f) => ({ ...f, product_id, price: suggested != null ? String(suggested) : f.price }));
+    setForm((f) => ({
+      ...f,
+      product_id,
+      price: suggested != null ? String(suggested) : f.price,
+    }));
   };
 
   const submit = async () => {
@@ -716,7 +1075,7 @@ function EditDesignModal({ order, items, products, cardCount, onClose, onDone })
     try {
       await ordersApi.updateDesign(order.id, {
         productId: form.product_id ? Number(form.product_id) : undefined,
-        price: form.price === '' ? undefined : Number(form.price),
+        price: form.price === "" ? undefined : Number(form.price),
         groupName: form.group_name || undefined,
         date: form.date || undefined,
         addr: form.addr || undefined,
@@ -724,10 +1083,10 @@ function EditDesignModal({ order, items, products, cardCount, onClose, onDone })
         notes: form.notes || undefined,
         items: cards.map((c) => ({ id: c.id, name: c.name, color: c.color })),
       });
-      toast('Design updated');
+      toast("Design updated");
       onDone();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
       setBusy(false);
     }
   };
@@ -735,48 +1094,90 @@ function EditDesignModal({ order, items, products, cardCount, onClose, onDone })
   const noTier = form.product_id && tierPrice(form.product_id) == null;
 
   return (
-    <Modal wide title="Edit design" onClose={onClose}
-      footer={(
+    <Modal
+      wide
+      title="Edit design"
+      onClose={onClose}
+      footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit} disabled={busy || !form.product_id}>
-            {busy ? 'Saving…' : 'Save changes'}
+          <button className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            onClick={submit}
+            disabled={busy || !form.product_id}
+          >
+            {busy ? "Saving…" : "Save changes"}
           </button>
         </>
-      )}>
+      }
+    >
       <div className="stack" style={{ gap: 14 }}>
         <div className="grid-2" style={{ gap: 12 }}>
           <label className="field">
             <span>Product / design</span>
-            <select className="input" value={form.product_id} onChange={onProduct}>
-              {!products.some((p) => String(p.id) === String(form.product_id)) && (
-                <option value={form.product_id}>{order.product_name || 'Current product'}</option>
+            <select
+              className="input"
+              value={form.product_id}
+              onChange={onProduct}
+            >
+              {!products.some(
+                (p) => String(p.id) === String(form.product_id),
+              ) && (
+                <option value={form.product_id}>
+                  {order.product_name || "Current product"}
+                </option>
               )}
               {products.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
               ))}
             </select>
           </label>
           <label className="field">
-            <span>Price (EGP) — {cardCount} card{Number(cardCount) === 1 ? '' : 's'}</span>
-            <input className="input" type="number" min="0" step="0.01" value={form.price} onChange={set('price')} />
-            {noTier && <span className="small" style={{ color: 'var(--danger)' }}>No preset price for {cardCount} cards — enter it manually.</span>}
+            <span>
+              Price (EGP) — {cardCount} card{Number(cardCount) === 1 ? "" : "s"}
+            </span>
+            <input
+              className="input"
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.price}
+              onChange={set("price")}
+            />
+            {noTier && (
+              <span className="small" style={{ color: "var(--danger)" }}>
+                No preset price for {cardCount} cards — enter it manually.
+              </span>
+            )}
           </label>
         </div>
         {isFrnds && (
           <label className="field">
             <span>Group name</span>
-            <input className="input" value={form.group_name} onChange={set('group_name')} />
+            <input
+              className="input"
+              value={form.group_name}
+              onChange={set("group_name")}
+            />
           </label>
         )}
         <div className="grid-2" style={{ gap: 12 }}>
           <label className="field">
             <span>Anniversary date</span>
-            <input className="input" type="date" value={form.date} onChange={set('date')} />
+            <input
+              className="input"
+              type="date"
+              value={form.date}
+              onChange={set("date")}
+            />
           </label>
           <label className="field">
             <span>On-card address</span>
-            <input className="input" value={form.addr} onChange={set('addr')} />
+            <input className="input" value={form.addr} onChange={set("addr")} />
           </label>
         </div>
 
@@ -785,14 +1186,24 @@ function EditDesignModal({ order, items, products, cardCount, onClose, onDone })
             <span>Cards — name &amp; colour</span>
             <div className="stack" style={{ gap: 10 }}>
               {cards.map((c, i) => (
-                <div key={c.id ?? i} className="grid-2" style={{ gap: 12, alignItems: 'flex-end' }}>
+                <div
+                  key={c.id ?? i}
+                  className="grid-2"
+                  style={{ gap: 12, alignItems: "flex-end" }}
+                >
                   <label className="field">
                     <span className="small muted">Card {i + 1} name</span>
-                    <input className="input" value={c.name} onChange={(e) => setCard(i, 'name', e.target.value)} />
+                    <input
+                      className="input"
+                      value={c.name}
+                      onChange={(e) => setCard(i, "name", e.target.value)}
+                    />
                   </label>
                   <label className="field">
                     <span className="small muted">Colour</span>
-                    {colorSelect(c.color, (e) => setCard(i, 'color', e.target.value))}
+                    {colorSelect(c.color, (e) =>
+                      setCard(i, "color", e.target.value),
+                    )}
                   </label>
                 </div>
               ))}
@@ -802,11 +1213,16 @@ function EditDesignModal({ order, items, products, cardCount, onClose, onDone })
 
         <label className="field">
           <span>Song URL</span>
-          <input className="input" value={form.song} onChange={set('song')} />
+          <input className="input" value={form.song} onChange={set("song")} />
         </label>
         <label className="field">
           <span>Customer notes</span>
-          <textarea className="input" rows={3} value={form.notes} onChange={set('notes')} />
+          <textarea
+            className="input"
+            rows={3}
+            value={form.notes}
+            onChange={set("notes")}
+          />
         </label>
       </div>
     </Modal>
@@ -826,14 +1242,19 @@ function ShipmentList({ shipments, onChanged }) {
       toast(`Shipment marked ${SHIP_STATUS[status].label.toLowerCase()}`);
       onChanged();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
     } finally {
       setBusyId(null);
     }
   };
 
   if (!shipments.length) {
-    return <Empty title="Not shipped yet" hint="Create a shipment to get a tracking number." />;
+    return (
+      <Empty
+        title="Not shipped yet"
+        hint="Create a shipment to get a tracking number."
+      />
+    );
   }
 
   return (
@@ -842,24 +1263,51 @@ function ShipmentList({ shipments, onChanged }) {
         const st = SHIP_STATUS[s.status] ?? SHIP_STATUS.active;
         return (
           <div className="tl-item" key={s.id}>
-            <div className="tl-rail"><div className="tl-dot" style={{ '--tl-c': st.color }} /><div className="tl-line" /></div>
+            <div className="tl-rail">
+              <div className="tl-dot" style={{ "--tl-c": st.color }} />
+              <div className="tl-line" />
+            </div>
             <div className="grow">
               <div className="row" style={{ gap: 8 }}>
                 <span className="mono strong">{s.tracking_no}</span>
                 <CopyButton text={s.tracking_no} label="tracking number" />
               </div>
-              <div className="small muted" style={{ margin: '2px 0 6px' }}>
-                <span className="badge" style={{ '--badge-c': st.color, marginRight: 6 }}><span className="dot" />{st.label}</span>
+              <div className="small muted" style={{ margin: "2px 0 6px" }}>
+                <span
+                  className="badge"
+                  style={{ "--badge-c": st.color, marginRight: 6 }}
+                >
+                  <span className="dot" />
+                  {st.label}
+                </span>
                 {s.carrier.toUpperCase()} · {fmtDate(s.created_at, true)}
                 {Number(s.cod_amount) > 0 && <> · COD {money2(s.cod_amount)}</>}
               </div>
               {s.notes && <div className="small muted">“{s.notes}”</div>}
-              {s.status === 'active' && (
+              {s.status === "active" && (
                 <Can perm="orders.shipment.status.update">
                   <div className="row" style={{ gap: 6, marginTop: 4 }}>
-                    <button className="btn sm" disabled={busyId === s.id} onClick={() => setStatus(s.id, 'delivered')}>Delivered</button>
-                    <button className="btn sm" disabled={busyId === s.id} onClick={() => setStatus(s.id, 'returned')}>Returned</button>
-                    <button className="btn sm danger" disabled={busyId === s.id} onClick={() => setStatus(s.id, 'cancelled')}>Cancel</button>
+                    <button
+                      className="btn sm"
+                      disabled={busyId === s.id}
+                      onClick={() => setStatus(s.id, "delivered")}
+                    >
+                      Delivered
+                    </button>
+                    <button
+                      className="btn sm"
+                      disabled={busyId === s.id}
+                      onClick={() => setStatus(s.id, "returned")}
+                    >
+                      Returned
+                    </button>
+                    <button
+                      className="btn sm danger"
+                      disabled={busyId === s.id}
+                      onClick={() => setStatus(s.id, "cancelled")}
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </Can>
               )}
@@ -873,10 +1321,10 @@ function ShipmentList({ shipments, onChanged }) {
 
 function ShipmentModal({ orderId, defaultAmount, hasActive, onClose, onDone }) {
   const toast = useToast();
-  const [carrier, setCarrier] = useState('jt');
-  const [tracking, setTracking] = useState('');
+  const [carrier, setCarrier] = useState("jt");
+  const [tracking, setTracking] = useState("");
   const [amount, setAmount] = useState(String(defaultAmount.toFixed(2)));
-  const [notesTxt, setNotesTxt] = useState('');
+  const [notesTxt, setNotesTxt] = useState("");
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
@@ -891,7 +1339,7 @@ function ShipmentModal({ orderId, defaultAmount, hasActive, onClose, onDone }) {
       toast(`Shipment created — ${res.tracking_no}`);
       onDone();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
       setBusy(false);
     }
   };
@@ -900,28 +1348,52 @@ function ShipmentModal({ orderId, defaultAmount, hasActive, onClose, onDone }) {
     <Modal
       title="Create shipment"
       onClose={onClose}
-      footer={(
+      footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit} disabled={busy || !tracking.trim()}>
-            {busy ? 'Creating…' : 'Create shipment'}
+          <button className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            onClick={submit}
+            disabled={busy || !tracking.trim()}
+          >
+            {busy ? "Creating…" : "Create shipment"}
           </button>
         </>
-      )}
+      }
     >
       <div className="stack" style={{ gap: 14 }}>
         {hasActive && (
-          <div className="small" style={{ background: 'var(--warn-soft)', borderRadius: 8, padding: '8px 12px' }}>
-            ⚠ This order already has a shipment in transit. Creating a new one is meant for
-            re-shipping a returned parcel — mark the old shipment as returned first if you haven't.
+          <div
+            className="small"
+            style={{
+              background: "var(--warn-soft)",
+              borderRadius: 8,
+              padding: "8px 12px",
+            }}
+          >
+            ⚠ This order already has a shipment in transit. Creating a new one
+            is meant for re-shipping a returned parcel — mark the old shipment
+            as returned first if you haven't.
           </div>
         )}
 
         <label className="field">
           <span>Courier</span>
-          <div className="seg" style={{ display: 'flex' }}>
-            {[['jt', 'J&T Express'], ['flash', 'Flash Express'], ['manual', 'Manual']].map(([v, l]) => (
-              <button key={v} type="button" className={carrier === v ? 'active' : ''} style={{ flex: 1 }} onClick={() => setCarrier(v)}>
+          <div className="seg" style={{ display: "flex" }}>
+            {[
+              ["jt", "J&T Express"],
+              ["flash", "Flash Express"],
+              ["manual", "Manual"],
+            ].map(([v, l]) => (
+              <button
+                key={v}
+                type="button"
+                className={carrier === v ? "active" : ""}
+                style={{ flex: 1 }}
+                onClick={() => setCarrier(v)}
+              >
                 {l}
               </button>
             ))}
@@ -932,17 +1404,35 @@ function ShipmentModal({ orderId, defaultAmount, hasActive, onClose, onDone }) {
             carrier takes a manually-entered tracking number for now. */}
         <label className="field">
           <span>Tracking number</span>
-          <input className="input" value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Courier tracking no." autoFocus />
+          <input
+            className="input"
+            value={tracking}
+            onChange={(e) => setTracking(e.target.value)}
+            placeholder="Courier tracking no."
+            autoFocus
+          />
         </label>
 
         <label className="field">
           <span>COD amount (remaining balance)</span>
-          <input className="input" type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input
+            className="input"
+            type="number"
+            step="0.01"
+            min="0"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
         </label>
 
         <label className="field">
           <span>Notes (optional)</span>
-          <input className="input" value={notesTxt} onChange={(e) => setNotesTxt(e.target.value)} placeholder="e.g. re-ship after return" />
+          <input
+            className="input"
+            value={notesTxt}
+            onChange={(e) => setNotesTxt(e.target.value)}
+            placeholder="e.g. re-ship after return"
+          />
         </label>
       </div>
     </Modal>

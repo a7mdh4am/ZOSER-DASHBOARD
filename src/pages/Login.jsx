@@ -1,25 +1,25 @@
-import { useState } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useState } from "react";
+import { useAuth } from "../context/AuthContext.jsx";
 
 // Node's admin auth has no new-device email-OTP gate yet (see
 // _backend/README.md's admin auth scope notes) — this is a straight
 // username/password sign-in until that's built.
 export default function Login() {
   const { login } = useAuth();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setBusy(true);
     try {
       await login(username.trim(), password);
       // AuthContext set the user and the app re-renders
     } catch (err) {
-      setError(err.message || 'Sign-in failed');
+      setError(err.message || "Sign-in failed");
       setBusy(false);
     }
   };
@@ -58,13 +58,22 @@ export default function Login() {
           </label>
 
           {error && (
-            <div className="small" style={{ color: 'var(--danger)', fontWeight: 600 }} role="alert">
+            <div
+              className="small"
+              style={{ color: "var(--danger)", fontWeight: 600 }}
+              role="alert"
+            >
               {error}
             </div>
           )}
 
-          <button className="btn primary" type="submit" disabled={busy} style={{ padding: '10px 14px' }}>
-            {busy ? 'Signing in…' : 'Sign in'}
+          <button
+            className="btn primary"
+            type="submit"
+            disabled={busy}
+            style={{ padding: "10px 14px" }}
+          >
+            {busy ? "Signing in…" : "Sign in"}
           </button>
         </div>
       </form>

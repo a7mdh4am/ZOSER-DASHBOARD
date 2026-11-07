@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState } from "react";
 
 /**
  * Wraps an async action (a save, a toggle, a delete) so it can't run twice at

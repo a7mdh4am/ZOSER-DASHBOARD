@@ -1,10 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import { statusOf } from '../lib/format.js';
-import { IconCheck, IconChevronL, IconChevronR, IconCopy, IconInbox, IconSearch, IconX } from './Icons.jsx';
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
+import { statusOf } from "../lib/format.js";
+import {
+  IconCheck,
+  IconChevronL,
+  IconChevronR,
+  IconCopy,
+  IconInbox,
+  IconSearch,
+  IconX,
+} from "./Icons.jsx";
 
-export const Spinner = () => <div className="spinner" role="status" aria-label="Loading" />;
+export const Spinner = () => (
+  <div className="spinner" role="status" aria-label="Loading" />
+);
 
 /**
  * Section-level permission gate: renders `children` only when the current
@@ -22,30 +32,34 @@ export function Can({ perm, fallback = null, children }) {
  * stopPropagation keeps the row's own click from navigating a second time.
  */
 export const OrderLink = ({ id }) => (
-  <Link to={`/orders/${id}`} onClick={(e) => e.stopPropagation()}>#{id}</Link>
+  <Link to={`/orders/${id}`} onClick={(e) => e.stopPropagation()}>
+    #{id}
+  </Link>
 );
 
 export const StatusBadge = ({ status }) => {
   const s = statusOf(status);
   return (
-    <span className="badge" style={{ '--badge-c': s.color }}>
+    <span className="badge" style={{ "--badge-c": s.color }}>
       <span className="dot" aria-hidden />
       {s.label}
     </span>
   );
 };
 
-export const Empty = ({ title = 'Nothing here', hint }) => (
+export const Empty = ({ title = "Nothing here", hint }) => (
   <div className="empty">
     <IconInbox />
-    <div className="strong" style={{ color: 'var(--ink-2)' }}>{title}</div>
+    <div className="strong" style={{ color: "var(--ink-2)" }}>
+      {title}
+    </div>
     {hint && <div className="small">{hint}</div>}
   </div>
 );
 
 export function CopyButton({ text, label }) {
   const [copied, setCopied] = useState(false);
-  const title = `Copy ${label || ''}`.trim();
+  const title = `Copy ${label || ""}`.trim();
   return (
     <button
       type="button"
@@ -58,7 +72,9 @@ export function CopyButton({ text, label }) {
           await navigator.clipboard.writeText(String(text));
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
-        } catch { /* clipboard unavailable */ }
+        } catch {
+          /* clipboard unavailable */
+        }
       }}
     >
       {copied ? <IconCheck /> : <IconCopy />}
@@ -66,7 +82,12 @@ export function CopyButton({ text, label }) {
   );
 }
 
-export function SearchInput({ value, onChange, placeholder = 'Search…', delay = 350 }) {
+export function SearchInput({
+  value,
+  onChange,
+  placeholder = "Search…",
+  delay = 350,
+}) {
   const [local, setLocal] = useState(value);
   const timer = useRef();
 
@@ -74,7 +95,9 @@ export function SearchInput({ value, onChange, placeholder = 'Search…', delay 
   // keystroke that started it: that one still holds the page's old state, so a
   // filter changed during the delay would be undone.
   const onChangeRef = useRef(onChange);
-  useEffect(() => { onChangeRef.current = onChange; });
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
 
   // Follow `value` when it changes from outside (back/forward, a cleared
   // filter). Adjusting state during render avoids an extra effect pass:
@@ -109,21 +132,35 @@ export function SearchInput({ value, onChange, placeholder = 'Search…', delay 
 
 export function Modal({ title, onClose, children, footer, wide }) {
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose();
-    document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
+    const onKey = (e) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
     };
   }, [onClose]);
 
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+    <div
+      className="overlay"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        className={`modal${wide ? " wide" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <div className="m-head">
           <h3>{title}</h3>
-          <button className="btn ghost icon" onClick={onClose} aria-label="Close"><IconX /></button>
+          <button
+            className="btn ghost icon"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <IconX />
+          </button>
         </div>
         <div className="m-body">{children}</div>
         {footer && <div className="m-foot">{footer}</div>}
@@ -139,13 +176,27 @@ export function Pager({ page, perPage, total, onPage }) {
   const to = Math.min(total, page * perPage);
   return (
     <div className="pager">
-      <span className="small muted mono">{from}–{to} of {total}</span>
+      <span className="small muted mono">
+        {from}–{to} of {total}
+      </span>
       <div className="row">
-        <button className="btn sm icon" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Previous page">
+        <button
+          className="btn sm icon"
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+          aria-label="Previous page"
+        >
           <IconChevronL />
         </button>
-        <span className="small mono">{page} / {pages}</span>
-        <button className="btn sm icon" disabled={page >= pages} onClick={() => onPage(page + 1)} aria-label="Next page">
+        <span className="small mono">
+          {page} / {pages}
+        </span>
+        <button
+          className="btn sm icon"
+          disabled={page >= pages}
+          onClick={() => onPage(page + 1)}
+          aria-label="Next page"
+        >
           <IconChevronR />
         </button>
       </div>

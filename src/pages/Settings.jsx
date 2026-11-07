@@ -1,35 +1,56 @@
-import { useEffect, useState } from 'react';
-import { IconUser } from '../components/Icons.jsx';
-import { Spinner } from '../components/ui.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
-import { useToast } from '../context/ToastContext.jsx';
-import { useAction } from '../hooks/useAction.js';
-import { settingsApi } from '../lib/api.js';
-import { fmtDate } from '../lib/format.js';
+import { useEffect, useState } from "react";
+import { IconUser } from "../components/Icons.jsx";
+import { Spinner } from "../components/ui.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+import { useToast } from "../context/ToastContext.jsx";
+import { useAction } from "../hooks/useAction.js";
+import { settingsApi } from "../lib/api.js";
+import { fmtDate } from "../lib/format.js";
 
 /** Own-account settings — available to every staff role. */
 export default function Settings() {
   const [me, setMe] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [sessions, setSessions] = useState(null);
 
-  const load = () => settingsApi.me().then((d) => setMe(d.user)).catch((e) => setError(e.message));
-  const loadSessions = () => settingsApi.sessions().then((d) => setSessions(d.sessions)).catch(() => setSessions([]));
+  const load = () =>
+    settingsApi
+      .me()
+      .then((d) => setMe(d.user))
+      .catch((e) => setError(e.message));
+  const loadSessions = () =>
+    settingsApi
+      .sessions()
+      .then((d) => setSessions(d.sessions))
+      .catch(() => setSessions([]));
   // Both at once: the devices list doesn't need to wait for the profile.
-  useEffect(() => { load(); loadSessions(); }, []);
+  useEffect(() => {
+    load();
+    loadSessions();
+  }, []);
 
   if (error) return <div className="empty">{error}</div>;
-  if (!me) return <div style={{ padding: 60 }}><Spinner /></div>;
+  if (!me)
+    return (
+      <div style={{ padding: 60 }}>
+        <Spinner />
+      </div>
+    );
 
   return (
     <div className="stack" style={{ maxWidth: 720 }}>
       <div className="card">
         <div className="card-body row" style={{ gap: 14 }}>
-          <div className="avatar" style={{ width: 44, height: 44, fontSize: 17 }}>
+          <div
+            className="avatar"
+            style={{ width: 44, height: 44, fontSize: 17 }}
+          >
             {(me.display_name || me.username).slice(0, 2)}
           </div>
           <div className="grow">
-            <div className="strong" style={{ fontSize: 16 }}>{me.display_name || me.username}</div>
+            <div className="strong" style={{ fontSize: 16 }}>
+              {me.display_name || me.username}
+            </div>
             <div className="small muted">
               @{me.username} · {me.admin_roles.name}
             </div>
@@ -52,19 +73,26 @@ function SessionsCard({ sessions, onChanged }) {
   const [revoke] = useAction(async (s) => {
     try {
       await settingsApi.revokeSession(s.id);
-      toast(s.current ? 'Signed out this device' : 'Device signed out');
-      if (s.current) { window.location.reload(); return; }
+      toast(s.current ? "Signed out this device" : "Device signed out");
+      if (s.current) {
+        window.location.reload();
+        return;
+      }
       await onChanged();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
     }
   });
 
   return (
     <div className="card">
-      <div className="card-head"><h3>Active devices</h3></div>
+      <div className="card-head">
+        <h3>Active devices</h3>
+      </div>
       <div className="card-body">
-        {!sessions ? <Spinner /> : sessions.length === 0 ? (
+        {!sessions ? (
+          <Spinner />
+        ) : sessions.length === 0 ? (
           <div className="small muted">No active sessions.</div>
         ) : (
           <div className="stack" style={{ gap: 10 }}>
@@ -72,17 +100,31 @@ function SessionsCard({ sessions, onChanged }) {
               <div key={s.id} className="row" style={{ gap: 10 }}>
                 <div className="grow">
                   <div className="strong">
-                    {s.ip || 'unknown IP'} {s.current && <span className="badge" style={{ '--badge-c': 'var(--st-paid)' }}>this device</span>}
+                    {s.ip || "unknown IP"}{" "}
+                    {s.current && (
+                      <span
+                        className="badge"
+                        style={{ "--badge-c": "var(--st-paid)" }}
+                      >
+                        this device
+                      </span>
+                    )}
                   </div>
-                  <div className="small muted" style={{ overflowWrap: 'anywhere' }}>
-                    {s.user_agent || 'unknown browser'}
+                  <div
+                    className="small muted"
+                    style={{ overflowWrap: "anywhere" }}
+                  >
+                    {s.user_agent || "unknown browser"}
                   </div>
                   <div className="small muted">
-                    started {fmtDate(s.created_at, true)}{s.last_seen_at ? ` · last seen ${fmtDate(s.last_seen_at, true)}` : ''}
+                    started {fmtDate(s.created_at, true)}
+                    {s.last_seen_at
+                      ? ` · last seen ${fmtDate(s.last_seen_at, true)}`
+                      : ""}
                   </div>
                 </div>
                 <button className="btn sm danger" onClick={() => revoke(s)}>
-                  {s.current ? 'Sign out' : 'Revoke'}
+                  {s.current ? "Sign out" : "Revoke"}
                 </button>
               </div>
             ))}
@@ -96,7 +138,7 @@ function SessionsCard({ sessions, onChanged }) {
 function ProfileCard({ me, onChanged }) {
   const toast = useToast();
   const { refreshUser } = useAuth();
-  const [name, setName] = useState(me.display_name || '');
+  const [name, setName] = useState(me.display_name || "");
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
@@ -104,13 +146,13 @@ function ProfileCard({ me, onChanged }) {
     setBusy(true);
     try {
       const res = await settingsApi.updateProfile(name.trim());
-      toast('Profile updated');
+      toast("Profile updated");
       // The sidebar reads the signed-in user's `displayName`; this endpoint
       // answers with `display_name`.
       refreshUser({ displayName: res.user.display_name });
       onChanged();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
     } finally {
       setBusy(false);
     }
@@ -118,14 +160,30 @@ function ProfileCard({ me, onChanged }) {
 
   return (
     <div className="card">
-      <div className="card-head"><IconUser /><h3>Profile</h3></div>
-      <form className="card-body row" onSubmit={submit} style={{ alignItems: 'flex-end' }}>
+      <div className="card-head">
+        <IconUser />
+        <h3>Profile</h3>
+      </div>
+      <form
+        className="card-body row"
+        onSubmit={submit}
+        style={{ alignItems: "flex-end" }}
+      >
         <label className="field grow">
           <span>Display name</span>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={50} required />
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={50}
+            required
+          />
         </label>
-        <button className="btn primary" disabled={busy || name.trim() === (me.display_name || '')}>
-          {busy ? 'Saving…' : 'Save'}
+        <button
+          className="btn primary"
+          disabled={busy || name.trim() === (me.display_name || "")}
+        >
+          {busy ? "Saving…" : "Save"}
         </button>
       </form>
     </div>
@@ -134,22 +192,22 @@ function ProfileCard({ me, onChanged }) {
 
 function PasswordCard() {
   const toast = useToast();
-  const [form, setForm] = useState({ current: '', next: '', confirm: '' });
+  const [form, setForm] = useState({ current: "", next: "", confirm: "" });
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
     if (form.next !== form.confirm) {
-      toast('New passwords do not match', 'err');
+      toast("New passwords do not match", "err");
       return;
     }
     setBusy(true);
     try {
       await settingsApi.changePassword(form.current, form.next);
-      toast('Password changed');
-      setForm({ current: '', next: '', confirm: '' });
+      toast("Password changed");
+      setForm({ current: "", next: "", confirm: "" });
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
     } finally {
       setBusy(false);
     }
@@ -159,24 +217,53 @@ function PasswordCard() {
 
   return (
     <div className="card">
-      <div className="card-head"><h3>Password</h3></div>
+      <div className="card-head">
+        <h3>Password</h3>
+      </div>
       <form className="card-body stack" style={{ gap: 14 }} onSubmit={submit}>
         <label className="field">
           <span>Current password</span>
-          <input className="input" type="password" value={form.current} onChange={set('current')} required autoComplete="current-password" />
+          <input
+            className="input"
+            type="password"
+            value={form.current}
+            onChange={set("current")}
+            required
+            autoComplete="current-password"
+          />
         </label>
         <div className="grid-2" style={{ gap: 12 }}>
           <label className="field">
             <span>New password (min 8)</span>
-            <input className="input" type="password" value={form.next} onChange={set('next')} required minLength={8} autoComplete="new-password" />
+            <input
+              className="input"
+              type="password"
+              value={form.next}
+              onChange={set("next")}
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
           </label>
           <label className="field">
             <span>Confirm new password</span>
-            <input className="input" type="password" value={form.confirm} onChange={set('confirm')} required minLength={8} autoComplete="new-password" />
+            <input
+              className="input"
+              type="password"
+              value={form.confirm}
+              onChange={set("confirm")}
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
           </label>
         </div>
-        <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={busy}>
-          {busy ? 'Changing…' : 'Change password'}
+        <button
+          className="btn primary"
+          style={{ alignSelf: "flex-start" }}
+          disabled={busy}
+        >
+          {busy ? "Changing…" : "Change password"}
         </button>
       </form>
     </div>
@@ -185,11 +272,11 @@ function PasswordCard() {
 
 function EmailCard({ me, onChanged }) {
   const toast = useToast();
-  const [newEmail, setNewEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
-  const [step, setStep] = useState('form'); // form | verify
-  const [notice, setNotice] = useState('');
+  const [newEmail, setNewEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState("form"); // form | verify
+  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   // Node's admin accounts always have an email (unlike PHP's optional-until-set
@@ -201,9 +288,9 @@ function EmailCard({ me, onChanged }) {
     try {
       await settingsApi.requestEmailChange(newEmail.trim(), password);
       setNotice(`We sent a 6-digit code to ${me.email}.`);
-      setStep('verify');
+      setStep("verify");
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
     } finally {
       setBusy(false);
     }
@@ -214,11 +301,14 @@ function EmailCard({ me, onChanged }) {
     setBusy(true);
     try {
       await settingsApi.confirmEmailChange(newEmail.trim(), code.trim());
-      toast('Email updated');
-      setStep('form'); setNewEmail(''); setPassword(''); setCode('');
+      toast("Email updated");
+      setStep("form");
+      setNewEmail("");
+      setPassword("");
+      setCode("");
       onChanged();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
     } finally {
       setBusy(false);
     }
@@ -229,54 +319,104 @@ function EmailCard({ me, onChanged }) {
       <div className="card-head">
         <h3>Email</h3>
         <div className="grow" />
-        <span className="small muted">{me.email || 'no email set'}</span>
+        <span className="small muted">{me.email || "no email set"}</span>
       </div>
-      {step === 'form' ? (
-        <form className="card-body stack" style={{ gap: 14 }} onSubmit={request}>
+      {step === "form" ? (
+        <form
+          className="card-body stack"
+          style={{ gap: 14 }}
+          onSubmit={request}
+        >
           {me.email ? (
             <div className="small muted">
-              Changing your email sends a 6-digit code to your <strong>current</strong> address first.
+              Changing your email sends a 6-digit code to your{" "}
+              <strong>current</strong> address first.
             </div>
           ) : (
             <div className="small muted">
-              No email on file yet — set one so account security features (verification codes,
-              upcoming 2FA login) can reach you.
+              No email on file yet — set one so account security features
+              (verification codes, upcoming 2FA login) can reach you.
             </div>
           )}
           <div className="grid-2" style={{ gap: 12 }}>
             <label className="field">
               <span>New email</span>
-              <input className="input" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required />
+              <input
+                className="input"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                required
+              />
             </label>
             <label className="field">
               <span>Current password</span>
-              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+              <input
+                className="input"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
             </label>
           </div>
-          <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={busy}>
-            {busy ? '…' : me.email ? 'Send verification code' : 'Save email'}
+          <button
+            className="btn primary"
+            style={{ alignSelf: "flex-start" }}
+            disabled={busy}
+          >
+            {busy ? "…" : me.email ? "Send verification code" : "Save email"}
           </button>
         </form>
       ) : (
-        <form className="card-body stack" style={{ gap: 14 }} onSubmit={confirm}>
-          <div className="small" style={{ background: 'var(--good-soft)', borderRadius: 8, padding: '8px 12px' }}>
+        <form
+          className="card-body stack"
+          style={{ gap: 14 }}
+          onSubmit={confirm}
+        >
+          <div
+            className="small"
+            style={{
+              background: "var(--good-soft)",
+              borderRadius: 8,
+              padding: "8px 12px",
+            }}
+          >
             {notice}
           </div>
           <div className="row">
             <input
               className="input mono"
-              style={{ maxWidth: 180, fontSize: 18, letterSpacing: 6, textAlign: 'center' }}
+              style={{
+                maxWidth: 180,
+                fontSize: 18,
+                letterSpacing: 6,
+                textAlign: "center",
+              }}
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={(e) =>
+                setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
               placeholder="••••••"
               inputMode="numeric"
               autoFocus
               required
             />
-            <button className="btn primary" disabled={busy || code.length !== 6}>
-              {busy ? '…' : 'Confirm'}
+            <button
+              className="btn primary"
+              disabled={busy || code.length !== 6}
+            >
+              {busy ? "…" : "Confirm"}
             </button>
-            <button type="button" className="btn ghost" onClick={() => { setStep('form'); setCode(''); }}>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => {
+                setStep("form");
+                setCode("");
+              }}
+            >
               Cancel
             </button>
           </div>

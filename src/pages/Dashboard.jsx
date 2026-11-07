@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AreaChart, BarList, StatCard } from '../components/charts.jsx';
-import { Empty, OrderLink, Spinner, StatusBadge } from '../components/ui.jsx';
-import { IconRefresh } from '../components/Icons.jsx';
-import { dashboardApi } from '../lib/api.js';
-import { localISODate } from '../lib/dates.js';
-import { fmtDate, money, statusOf, STATUS_ORDER } from '../lib/format.js';
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AreaChart, BarList, StatCard } from "../components/charts.jsx";
+import { Empty, OrderLink, Spinner, StatusBadge } from "../components/ui.jsx";
+import { IconRefresh } from "../components/Icons.jsx";
+import { dashboardApi } from "../lib/api.js";
+import { localISODate } from "../lib/dates.js";
+import { fmtDate, money, statusOf, STATUS_ORDER } from "../lib/format.js";
 
 const shortMoney = (v) => {
   const n = Number(v) || 0;
@@ -24,13 +24,19 @@ function pctDelta(now, prev) {
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
-  const [error, setError] = useState('');
-  const [metric, setMetric] = useState('revenue');
+  const [error, setError] = useState("");
+  const [metric, setMetric] = useState("revenue");
   const navigate = useNavigate();
 
-  const load = () => dashboardApi.get().then(setData).catch((e) => setError(e.message));
+  const load = () =>
+    dashboardApi
+      .get()
+      .then(setData)
+      .catch((e) => setError(e.message));
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const series = useMemo(() => {
     if (!data) return [];
@@ -42,8 +48,10 @@ export default function Dashboard() {
       d.setDate(d.getDate() - i);
       const row = byDay[localISODate(d)];
       out.push({
-        x: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-        y: row ? Number(metric === 'revenue' ? row.revenue : row.order_count) : 0,
+        x: d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+        y: row
+          ? Number(metric === "revenue" ? row.revenue : row.order_count)
+          : 0,
       });
     }
     return out;
@@ -51,14 +59,26 @@ export default function Dashboard() {
 
   const statusRows = useMemo(() => {
     if (!data) return [];
-    const counts = Object.fromEntries(data.status_breakdown.map((r) => [String(r.status), Number(r.order_count)]));
-    return STATUS_ORDER
-      .filter((s) => counts[s])
-      .map((s) => ({ name: statusOf(s).label, value: counts[s], status: s }));
+    const counts = Object.fromEntries(
+      data.status_breakdown.map((r) => [
+        String(r.status),
+        Number(r.order_count),
+      ]),
+    );
+    return STATUS_ORDER.filter((s) => counts[s]).map((s) => ({
+      name: statusOf(s).label,
+      value: counts[s],
+      status: s,
+    }));
   }, [data]);
 
   if (error) return <Empty title="Couldn't load the dashboard" hint={error} />;
-  if (!data) return <div style={{ padding: 60 }}><Spinner /></div>;
+  if (!data)
+    return (
+      <div style={{ padding: 60 }}>
+        <Spinner />
+      </div>
+    );
 
   const s = data.summary;
   const orderDelta = pctDelta(s.this_month_orders, s.last_month_orders);
@@ -96,40 +116,76 @@ export default function Dashboard() {
           <h3>Last 30 days</h3>
           <div className="grow" />
           <div className="seg" role="group" aria-label="Metric">
-            <button className={metric === 'revenue' ? 'active' : ''} aria-pressed={metric === 'revenue'} onClick={() => setMetric('revenue')}>Revenue</button>
-            <button className={metric === 'orders' ? 'active' : ''} aria-pressed={metric === 'orders'} onClick={() => setMetric('orders')}>Orders</button>
+            <button
+              className={metric === "revenue" ? "active" : ""}
+              aria-pressed={metric === "revenue"}
+              onClick={() => setMetric("revenue")}
+            >
+              Revenue
+            </button>
+            <button
+              className={metric === "orders" ? "active" : ""}
+              aria-pressed={metric === "orders"}
+              onClick={() => setMetric("orders")}
+            >
+              Orders
+            </button>
           </div>
-          <button className="btn ghost icon" onClick={load} title="Refresh" aria-label="Refresh"><IconRefresh /></button>
+          <button
+            className="btn ghost icon"
+            onClick={load}
+            title="Refresh"
+            aria-label="Refresh"
+          >
+            <IconRefresh />
+          </button>
         </div>
         <div className="card-body">
           <AreaChart
             data={series}
-            formatY={(v) => (metric === 'revenue' ? shortMoney(v) : Math.round(v).toLocaleString())}
+            formatY={(v) =>
+              metric === "revenue"
+                ? shortMoney(v)
+                : Math.round(v).toLocaleString()
+            }
           />
         </div>
       </div>
 
       <div className="grid-2">
         <div className="card">
-          <div className="card-head"><h3>Orders by status</h3></div>
+          <div className="card-head">
+            <h3>Orders by status</h3>
+          </div>
           <div className="card-body">
-            {statusRows.length
-              ? <BarList data={statusRows} formatV={(v) => v.toLocaleString()} color={(d) => statusOf(d.status).color} />
-              : <Empty title="No orders yet" />}
+            {statusRows.length ? (
+              <BarList
+                data={statusRows}
+                formatV={(v) => v.toLocaleString()}
+                color={(d) => statusOf(d.status).color}
+              />
+            ) : (
+              <Empty title="No orders yet" />
+            )}
           </div>
         </div>
 
         <div className="card">
-          <div className="card-head"><h3>Product performance</h3></div>
+          <div className="card-head">
+            <h3>Product performance</h3>
+          </div>
           <div className="card-body">
-            {data.product_performance.length
-              ? (
-                <BarList
-                  data={data.product_performance.map((p) => ({ name: p.product_name, value: Number(p.total_revenue) }))}
-                  formatV={(v) => money(v)}
-                />
-              )
-              : <Empty title="No product data" />}
+            {data.product_performance.length ? (
+              <BarList
+                data={data.product_performance.map((p) => ({
+                  name: p.product_name,
+                  value: Number(p.total_revenue),
+                }))}
+                formatV={(v) => money(v)}
+              />
+            ) : (
+              <Empty title="No product data" />
+            )}
           </div>
         </div>
       </div>
@@ -139,25 +195,43 @@ export default function Dashboard() {
           <div className="card-head">
             <h3>Recent orders</h3>
             <div className="grow" />
-            <button className="btn sm ghost" onClick={() => navigate('/orders')}>View all</button>
+            <button
+              className="btn sm ghost"
+              onClick={() => navigate("/orders")}
+            >
+              View all
+            </button>
           </div>
           <div className="table-scroll">
             <table className="table">
               <thead>
-                <tr><th>Order</th><th>Customer</th><th>Status</th><th className="num">Total</th></tr>
+                <tr>
+                  <th>Order</th>
+                  <th>Customer</th>
+                  <th>Status</th>
+                  <th className="num">Total</th>
+                </tr>
               </thead>
               <tbody>
                 {data.recent_orders.map((o) => (
-                  <tr key={o.id} className="row-link" onClick={() => navigate(`/orders/${o.id}`)}>
+                  <tr
+                    key={o.id}
+                    className="row-link"
+                    onClick={() => navigate(`/orders/${o.id}`)}
+                  >
                     <td>
-                      <div className="strong"><OrderLink id={o.id} /></div>
+                      <div className="strong">
+                        <OrderLink id={o.id} />
+                      </div>
                       <div className="small muted">{fmtDate(o.order_time)}</div>
                     </td>
                     <td>
                       <div>{o.full_name}</div>
                       <div className="small muted">{o.product_name}</div>
                     </td>
-                    <td><StatusBadge status={o.status} /></td>
+                    <td>
+                      <StatusBadge status={o.status} />
+                    </td>
                     <td className="num strong">{money(o.net_total)}</td>
                   </tr>
                 ))}
@@ -167,16 +241,21 @@ export default function Dashboard() {
         </div>
 
         <div className="card">
-          <div className="card-head"><h3>Top zones</h3></div>
+          <div className="card-head">
+            <h3>Top zones</h3>
+          </div>
           <div className="card-body">
-            {data.top_zones.length
-              ? (
-                <BarList
-                  data={data.top_zones.map((z) => ({ name: z.zone || '—', value: Number(z.order_count) }))}
-                  formatV={(v) => v.toLocaleString()}
-                />
-              )
-              : <Empty title="No zone data" />}
+            {data.top_zones.length ? (
+              <BarList
+                data={data.top_zones.map((z) => ({
+                  name: z.zone || "—",
+                  value: Number(z.order_count),
+                }))}
+                formatV={(v) => v.toLocaleString()}
+              />
+            ) : (
+              <Empty title="No zone data" />
+            )}
           </div>
         </div>
       </div>
