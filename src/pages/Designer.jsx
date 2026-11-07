@@ -108,7 +108,7 @@ export default function Designer() {
                       {o.group_name ? ` · ${o.group_name}` : ""}
                     </div>
                   </div>
-                  <div className="row" style={{ marginTop: 10, gap: 6 }}>
+                  <div className="row gap-6" style={{ marginTop: 10 }}>
                     {o.colors.map((c) => (
                       <Badge
                         key={c.name}
@@ -191,8 +191,8 @@ function DesignDetail({ id, onClose, onChanged }) {
       ) : !data ? (
         <PageLoader padding={40} />
       ) : (
-        <div className="stack" style={{ gap: 18 }}>
-          <div className="row wrap" style={{ gap: 8 }}>
+        <div className="stack gap-18">
+          <div className="row wrap gap-8">
             <StatusBadge status={order.status} />
             <span className="small muted">{order.product_name}</span>
             <div className="grow" />
@@ -204,9 +204,7 @@ function DesignDetail({ id, onClose, onChanged }) {
           {/* cards to produce */}
           {data.items.length > 0 && (
             <div>
-              <div className="small strong muted" style={{ marginBottom: 8 }}>
-                CARDS ({data.items.length})
-              </div>
+              <div className="section-label">CARDS ({data.items.length})</div>
               <OrderItemsGrid items={data.items} nameClassName="copy-line" />
             </div>
           )}
@@ -216,17 +214,14 @@ function DesignDetail({ id, onClose, onChanged }) {
           {/* production notes */}
           {data.notes.length > 0 && (
             <div>
-              <div className="small strong muted" style={{ marginBottom: 8 }}>
-                PRODUCTION NOTES
-              </div>
+              <div className="section-label">PRODUCTION NOTES</div>
               <div className="timeline">
                 {data.notes.map((n, i) => (
                   <TimelineItem key={i} color="var(--st-production)">
-                    <div style={{ whiteSpace: "pre-wrap" }}>{n.edits}</div>
+                    <div className="pre-wrap">{n.edits}</div>
                     {n.image_url && (
                       <a
-                        className="small"
-                        style={{ color: "var(--accent)" }}
+                        className="small text-accent"
                         href={n.image_url}
                         target="_blank"
                         rel="noreferrer"

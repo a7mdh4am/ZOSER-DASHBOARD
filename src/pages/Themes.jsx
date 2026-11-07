@@ -151,10 +151,10 @@ function CustomThemes({ themes, onChanged }) {
                         {" "}
                         ·{" "}
                         <a
+                          className="text-accent"
                           href={t.preview_link}
                           target="_blank"
                           rel="noreferrer"
-                          style={{ color: "var(--accent)" }}
                         >
                           preview <IconExternal size={10} />
                         </a>
@@ -162,7 +162,7 @@ function CustomThemes({ themes, onChanged }) {
                     )}
                   </div>
                   <Can perm="catalog.themes.manage">
-                    <div className="row" style={{ gap: 6 }}>
+                    <div className="row gap-6">
                       <button
                         className="btn sm"
                         onClick={() =>
@@ -215,8 +215,8 @@ function CustomThemes({ themes, onChanged }) {
             </>
           }
         >
-          <div className="stack" style={{ gap: 14 }}>
-            <div className="grid-2" style={{ gap: 12 }}>
+          <div className="stack gap-14">
+            <div className="grid-2 gap-12">
               <label className="field">
                 <span>Name</span>
                 <input
@@ -259,8 +259,8 @@ function CustomThemes({ themes, onChanged }) {
                 }
               />
             </label>
-            <div className="row" style={{ gap: 18 }}>
-              <label className="row" style={{ gap: 6, cursor: "pointer" }}>
+            <div className="row gap-18">
+              <label className="row gap-6" style={{ cursor: "pointer" }}>
                 <input
                   type="checkbox"
                   checked={editing.is_new}
@@ -270,7 +270,7 @@ function CustomThemes({ themes, onChanged }) {
                 />
                 Mark as new
               </label>
-              <label className="row" style={{ gap: 6, cursor: "pointer" }}>
+              <label className="row gap-6" style={{ cursor: "pointer" }}>
                 <input
                   type="checkbox"
                   checked={editing.is_active}
@@ -312,7 +312,7 @@ function AssignCard() {
       <div className="card-head">
         <h3>Assign themes to a customer</h3>
       </div>
-      <div className="card-body stack" style={{ gap: 12 }}>
+      <div className="card-body stack gap-12">
         <form
           className="row"
           onSubmit={(e) => {
@@ -335,7 +335,7 @@ function AssignCard() {
         </form>
 
         {lookup && !lookup.found && (
-          <div className="small" style={{ color: "var(--danger)" }}>
+          <div className="small text-danger">
             No account with that username.
           </div>
         )}
@@ -468,11 +468,11 @@ function SiteThemes({ themes, onChanged }) {
                     {Number(t.is_active) ? "active" : "disabled"}
                   </Badge>
                 </td>
-                <td style={{ textAlign: "right" }}>
+                <td className="text-right">
                   <Can perm="catalog.themes.manage">
                     <div
-                      className="row"
-                      style={{ gap: 6, justifyContent: "flex-end" }}
+                      className="row gap-6"
+                      style={{ justifyContent: "flex-end" }}
                     >
                       <button
                         className="btn sm ghost"
@@ -525,8 +525,8 @@ function SiteThemes({ themes, onChanged }) {
             </>
           }
         >
-          <div className="stack" style={{ gap: 14 }}>
-            <div className="grid-2" style={{ gap: 12 }}>
+          <div className="stack gap-14">
+            <div className="grid-2 gap-12">
               <label className="field">
                 <span>Internal name (unique)</span>
                 <input

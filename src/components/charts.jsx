@@ -335,9 +335,9 @@ export function GroupedBars({
 
   return (
     <div className="viz-root">
-      <div className="row small" style={{ gap: 14, marginBottom: 6 }}>
+      <div className="row small gap-14" style={{ marginBottom: 6 }}>
         {series.map((s) => (
-          <span key={s.key} className="row" style={{ gap: 6 }}>
+          <span key={s.key} className="row gap-6">
             <span
               style={{
                 width: 10,

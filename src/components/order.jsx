@@ -42,7 +42,7 @@ export function OrderItemsGrid({ items, nameClassName }) {
               <CopyButton text={it.name} label="name" />
             </span>
           </div>
-          <div className="row" style={{ gap: 6, marginTop: 2 }}>
+          <div className="row gap-6" style={{ marginTop: 2 }}>
             {it.color && (
               <>
                 <span
@@ -58,13 +58,8 @@ export function OrderItemsGrid({ items, nameClassName }) {
             )}
             {it.full_image_url && (
               <a
-                className="small"
-                style={{
-                  color: "var(--accent)",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
+                className="small text-accent gap-4"
+                style={{ display: "inline-flex", alignItems: "center" }}
                 href={it.full_image_url}
                 download
               >
@@ -107,10 +102,10 @@ export function CustomizationFields({ order, showDesign = false }) {
           <div className="v copy-line">
             <IconMusic />
             <a
+              className="text-accent break-anywhere"
               href={order.song}
               target="_blank"
               rel="noreferrer"
-              style={{ color: "var(--accent)", overflowWrap: "anywhere" }}
             >
               {order.song}
             </a>
@@ -121,7 +116,7 @@ export function CustomizationFields({ order, showDesign = false }) {
       {order.notes && (
         <div className="kv-item full">
           <div className="k">Customer notes</div>
-          <div className="v copy-line" style={{ whiteSpace: "pre-wrap" }}>
+          <div className="v copy-line pre-wrap">
             {order.notes}
             <CopyButton text={order.notes} label="notes" />
           </div>

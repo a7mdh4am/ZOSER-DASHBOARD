@@ -195,7 +195,7 @@ export function CashflowTab({ filters }) {
                   </>
                 }
               >
-                <div className="stack" style={{ gap: 14 }}>
+                <div className="stack gap-14">
                   <label className="field">
                     <span>Type</span>
                     <Segmented

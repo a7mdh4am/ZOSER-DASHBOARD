@@ -45,14 +45,13 @@ export function NotesCard({ orderId, notes, onChanged }) {
           <div className="timeline">
             {notes.map((n, i) => (
               <TimelineItem key={i} color="var(--st-production)">
-                <div style={{ whiteSpace: "pre-wrap" }}>{n.edits}</div>
+                <div className="pre-wrap">{n.edits}</div>
                 {n.images?.length > 0 && (
-                  <div className="row wrap" style={{ gap: 10, marginTop: 2 }}>
+                  <div className="row wrap" style={{ marginTop: 2 }}>
                     {n.images.map((img, imgIdx) => (
                       <a
                         key={imgIdx}
-                        className="small"
-                        style={{ color: "var(--accent)" }}
+                        className="small text-accent"
                         href={img.image_url}
                         target="_blank"
                         rel="noreferrer"
@@ -115,7 +114,7 @@ function NoteModal({ orderId, onClose, onDone }) {
         </>
       }
     >
-      <div className="stack" style={{ gap: 14 }}>
+      <div className="stack gap-14">
         <label className="field">
           <span>Note — what the customer needs / changed</span>
           <textarea

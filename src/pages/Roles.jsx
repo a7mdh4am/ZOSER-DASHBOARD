@@ -49,17 +49,17 @@ export default function Roles() {
       </div>
 
       <div className="card-body">
-        <div className="stack" style={{ gap: 12 }}>
+        <div className="stack gap-12">
           {data.roles.map((r) => (
             <div
               key={r.id}
-              className="row"
-              style={{ gap: 12, alignItems: "flex-start" }}
+              className="row gap-12"
+              style={{ alignItems: "flex-start" }}
             >
               <div className="grow">
                 <div
-                  className="row wrap"
-                  style={{ gap: 8, alignItems: "center" }}
+                  className="row wrap gap-8"
+                  style={{ alignItems: "center" }}
                 >
                   <span className="strong">{r.name}</span>
                   <span className="small mono muted">{r.code}</span>
@@ -76,7 +76,7 @@ export default function Roles() {
                   {r.userCount} staff · {r.permissions.length} permissions
                 </div>
               </div>
-              <div className="row" style={{ gap: 6 }}>
+              <div className="row gap-6">
                 {!r.isSystem && (
                   <button
                     className="btn sm ghost"
@@ -169,8 +169,8 @@ function RoleEditor({ role, permissionCatalog, onClose, onDone }) {
         </>
       }
     >
-      <div className="stack" style={{ gap: 14 }}>
-        <div className="grid-2" style={{ gap: 12 }}>
+      <div className="stack gap-14">
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>Role name</span>
             <input
@@ -203,12 +203,12 @@ function RoleEditor({ role, permissionCatalog, onClose, onDone }) {
           />
         </label>
 
-        <div className="stack" style={{ gap: 6 }}>
+        <div className="stack gap-6">
           <span className="perm-title">Permissions</span>
           {areas.map(([area, perms]) => (
             <div key={area} className="perm-row">
               <div className="perm-area">{area}</div>
-              <div className="row wrap" style={{ gap: 14 }}>
+              <div className="row wrap gap-14">
                 {perms.map((p) => (
                   <label
                     key={p.code}

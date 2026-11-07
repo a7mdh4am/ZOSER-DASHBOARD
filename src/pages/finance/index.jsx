@@ -97,10 +97,7 @@ export default function Finance() {
         </button>
       </div>
       {preset === "custom" && (
-        <div
-          className="row wrap no-print"
-          style={{ gap: 10, alignItems: "flex-end" }}
-        >
+        <div className="row wrap no-print" style={{ alignItems: "flex-end" }}>
           <label className="field">
             <span>From</span>
             <input

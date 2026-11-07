@@ -111,7 +111,7 @@ function EditContactModal({ order, onClose, onDone }) {
         </>
       }
     >
-      <div className="stack" style={{ gap: 14 }}>
+      <div className="stack gap-14">
         <label className="field">
           <span>Phone</span>
           <input
@@ -129,7 +129,7 @@ function EditContactModal({ order, onClose, onDone }) {
             onChange={set("address")}
           />
         </label>
-        <div className="grid-2" style={{ gap: 12 }}>
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>City</span>
             <select

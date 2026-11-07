@@ -177,9 +177,7 @@ export const CopyField = ({ value, label, style }) => (
       ...style,
     }}
   >
-    <span className="small mono grow" style={{ overflowWrap: "anywhere" }}>
-      {value}
-    </span>
+    <span className="small mono grow break-anywhere">{value}</span>
     <CopyButton text={value} label={label} />
   </div>
 );

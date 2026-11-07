@@ -37,7 +37,7 @@ export function OverviewTab({ filters, onOptions }) {
         return (
           <div className="stack">
             {d.alerts.length > 0 && (
-              <div className="stack" style={{ gap: 8 }}>
+              <div className="stack gap-8">
                 {d.alerts.map((a, i) => (
                   <div key={i} className={`alert-card ${a.level}`}>
                     <span aria-hidden>{a.level === "warn" ? "⚠️" : "📈"}</span>

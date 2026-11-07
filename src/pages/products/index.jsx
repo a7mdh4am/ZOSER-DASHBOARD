@@ -94,7 +94,7 @@ function ProductCard({ product: p, onEdit }) {
             <div className="small muted">
               {p.product_types.name} · qty {p.quantity}
             </div>
-            <div className="row wrap" style={{ gap: 4, marginTop: 6 }}>
+            <div className="row wrap gap-4" style={{ marginTop: 6 }}>
               {flagBadges(p).map(([label, color]) => (
                 <Badge key={label} color={color} dot={false}>
                   {label}
@@ -103,7 +103,7 @@ function ProductCard({ product: p, onEdit }) {
             </div>
           </div>
         </div>
-        <div className="row" style={{ marginTop: 10, gap: 4 }}>
+        <div className="row gap-4" style={{ marginTop: 10 }}>
           {p.colors.map((c) => (
             <span
               key={c.id}
@@ -113,9 +113,7 @@ function ProductCard({ product: p, onEdit }) {
             />
           ))}
           {!p.colors.length && (
-            <span className="small" style={{ color: "var(--danger)" }}>
-              no colors!
-            </span>
+            <span className="small text-danger">no colors!</span>
           )}
         </div>
         <div

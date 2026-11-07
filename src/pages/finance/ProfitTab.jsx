@@ -159,7 +159,7 @@ export function ProfitTab({ filters }) {
                             <span className="muted">not set</span>
                           )}
                         </td>
-                        <td className="no-print" style={{ textAlign: "right" }}>
+                        <td className="no-print text-right">
                           <Can perm="finance.costs.manage">
                             <button
                               className="btn sm ghost"

@@ -67,7 +67,7 @@ export function DiscountsTab({ filters }) {
                       <tr key={c.coupon}>
                         <td className="strong mono">{c.coupon}</td>
                         <td className="num">{c.uses}</td>
-                        <td className="num" style={{ color: "var(--danger)" }}>
+                        <td className="num text-danger">
                           −{money(c.discount_total)}
                         </td>
                         <td className="num strong">{money(c.net)}</td>

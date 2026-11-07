@@ -45,10 +45,8 @@ export function CoverImageEditor({ product, onChanged }) {
 
   return (
     <div>
-      <div className="small strong muted" style={{ marginBottom: 8 }}>
-        COVER IMAGE (shop listing)
-      </div>
-      <div className="row" style={{ gap: 10, alignItems: "center" }}>
+      <div className="section-label">COVER IMAGE (shop listing)</div>
+      <div className="row" style={{ alignItems: "center" }}>
         <ProductImg url={cover?.image_url} size={56} />
         <Can perm="catalog.products.update">
           <button
@@ -107,10 +105,8 @@ export function ColorsEditor({ product, onChanged }) {
 
   return (
     <div>
-      <div className="small strong muted" style={{ marginBottom: 8 }}>
-        COLORS ({product.colors.length})
-      </div>
-      <div className="stack" style={{ gap: 10, marginBottom: 12 }}>
+      <div className="section-label">COLORS ({product.colors.length})</div>
+      <div className="stack gap-10" style={{ marginBottom: 12 }}>
         {product.colors.map((c) => (
           <div key={c.id} className="color-row">
             <span
@@ -121,7 +117,7 @@ export function ColorsEditor({ product, onChanged }) {
               {c.name}
             </span>
             {canImages && (
-              <div className="row" style={{ gap: 10 }}>
+              <div className="row">
                 <ColorImage
                   productId={product.id}
                   color={c}
@@ -153,7 +149,7 @@ export function ColorsEditor({ product, onChanged }) {
           </div>
         ))}
         {!product.colors.length && (
-          <span className="small" style={{ color: "var(--danger)" }}>
+          <span className="small text-danger">
             The shop can't sell this design without at least one color.
           </span>
         )}
@@ -303,9 +299,7 @@ export function PricesEditor({ product, onChanged }) {
 
   return (
     <div>
-      <div className="small strong muted" style={{ marginBottom: 8 }}>
-        PRICE TIERS (by card count)
-      </div>
+      <div className="section-label">PRICE TIERS (by card count)</div>
       {product.card_price_tiers.length > 0 && (
         <div className="table-scroll" style={{ marginBottom: 10 }}>
           <table className="table">
@@ -323,7 +317,7 @@ export function PricesEditor({ product, onChanged }) {
                   <td>{t.cards_count}</td>
                   <td className="num strong">{money(t.price)}</td>
                   <td className="num">{t.discount_percentage ?? "—"}</td>
-                  <td style={{ textAlign: "right" }}>
+                  <td className="text-right">
                     <Can perm="catalog.prices.update">
                       <button
                         type="button"
@@ -342,10 +336,7 @@ export function PricesEditor({ product, onChanged }) {
         </div>
       )}
       {!product.card_price_tiers.length && (
-        <div
-          className="small"
-          style={{ color: "var(--danger)", marginBottom: 8 }}
-        >
+        <div className="small text-danger" style={{ marginBottom: 8 }}>
           The shop can't price this design without at least one tier.
         </div>
       )}

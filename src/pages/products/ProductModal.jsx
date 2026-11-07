@@ -149,8 +149,8 @@ export function ProductModal({ productId, onClose, onChanged }) {
         </>
       }
     >
-      <div className="stack" style={{ gap: 16 }}>
-        <div className="grid-2" style={{ gap: 12 }}>
+      <div className="stack">
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>Name</span>
             <input
@@ -185,18 +185,14 @@ export function ProductModal({ productId, onClose, onChanged }) {
           />
         </label>
 
-        <div className="row wrap" style={{ gap: 16 }}>
+        <div className="row wrap gap-16">
           {[
             ["is_active", "Active"],
             ["in_stock", "In stock"],
             ["is_new", "New badge"],
             ["is_limited", "Limited"],
           ].map(([k, l]) => (
-            <label
-              key={k}
-              className="row"
-              style={{ gap: 6, cursor: "pointer" }}
-            >
+            <label key={k} className="row gap-6" style={{ cursor: "pointer" }}>
               <input
                 type="checkbox"
                 checked={form[k]}

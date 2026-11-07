@@ -134,10 +134,10 @@ export default function Coupons() {
                       </Badge>
                     </td>
                     {canEdit && (
-                      <td style={{ textAlign: "right" }}>
+                      <td className="text-right">
                         <div
-                          className="row"
-                          style={{ gap: 6, justifyContent: "flex-end" }}
+                          className="row gap-6"
+                          style={{ justifyContent: "flex-end" }}
                         >
                           <button
                             className="btn sm ghost"
@@ -245,8 +245,8 @@ function CouponModal({ coupon, onClose, onDone }) {
         </>
       }
     >
-      <div className="stack" style={{ gap: 14 }}>
-        <div className="grid-2" style={{ gap: 12 }}>
+      <div className="stack gap-14">
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>Code (max 10)</span>
             <input
@@ -271,7 +271,7 @@ function CouponModal({ coupon, onClose, onDone }) {
             />
           </label>
         </div>
-        <div className="grid-2" style={{ gap: 12 }}>
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>Type</span>
             <Segmented
@@ -298,7 +298,7 @@ function CouponModal({ coupon, onClose, onDone }) {
             />
           </label>
         </div>
-        <div className="grid-2" style={{ gap: 12 }}>
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>Minimum order (EGP, optional)</span>
             <input
@@ -320,7 +320,7 @@ function CouponModal({ coupon, onClose, onDone }) {
             />
           </label>
         </div>
-        <div className="grid-2" style={{ gap: 12 }}>
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>Per-customer limit (optional)</span>
             <input

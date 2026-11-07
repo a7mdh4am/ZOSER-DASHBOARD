@@ -52,7 +52,7 @@ export function ShipmentList({ shipments, onChanged }) {
         const st = SHIP_STATUS[s.status] ?? SHIP_STATUS.active;
         return (
           <TimelineItem key={s.id} color={st.color}>
-            <div className="row" style={{ gap: 8 }}>
+            <div className="row gap-8">
               <span className="mono strong">{s.tracking_no}</span>
               <CopyButton text={s.tracking_no} label="tracking number" />
             </div>
@@ -66,7 +66,7 @@ export function ShipmentList({ shipments, onChanged }) {
             {s.notes && <div className="small muted">“{s.notes}”</div>}
             {s.status === "active" && (
               <Can perm="orders.shipment.status.update">
-                <div className="row" style={{ gap: 6, marginTop: 4 }}>
+                <div className="row gap-6" style={{ marginTop: 4 }}>
                   <button
                     className="btn sm"
                     disabled={busyId === s.id}
@@ -145,7 +145,7 @@ export function ShipmentModal({
         </>
       }
     >
-      <div className="stack" style={{ gap: 14 }}>
+      <div className="stack gap-14">
         {hasActive && (
           <div
             className="small"

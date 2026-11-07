@@ -23,7 +23,7 @@ export default function Settings() {
   return (
     <div className="stack" style={{ maxWidth: 720 }}>
       <div className="card">
-        <div className="card-body row" style={{ gap: 14 }}>
+        <div className="card-body row gap-14">
           <div
             className="avatar"
             style={{ width: 44, height: 44, fontSize: 17 }}
@@ -78,9 +78,9 @@ function SessionsCard({ sessions, onChanged }) {
         ) : sessions.length === 0 ? (
           <div className="small muted">No active sessions.</div>
         ) : (
-          <div className="stack" style={{ gap: 10 }}>
+          <div className="stack gap-10">
             {sessions.map((s) => (
-              <div key={s.id} className="row" style={{ gap: 10 }}>
+              <div key={s.id} className="row">
                 <div className="grow">
                   <div className="strong">
                     {s.ip || "unknown IP"}{" "}
@@ -90,10 +90,7 @@ function SessionsCard({ sessions, onChanged }) {
                       </Badge>
                     )}
                   </div>
-                  <div
-                    className="small muted"
-                    style={{ overflowWrap: "anywhere" }}
-                  >
+                  <div className="small muted break-anywhere">
                     {s.user_agent || "unknown browser"}
                   </div>
                   <div className="small muted">
@@ -194,8 +191,7 @@ function PasswordCard() {
         <h3>Password</h3>
       </div>
       <form
-        className="card-body stack"
-        style={{ gap: 14 }}
+        className="card-body stack gap-14"
         onSubmit={(e) => {
           e.preventDefault();
           change();
@@ -212,7 +208,7 @@ function PasswordCard() {
             autoComplete="current-password"
           />
         </label>
-        <div className="grid-2" style={{ gap: 12 }}>
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>New password (min 8)</span>
             <input
@@ -238,11 +234,7 @@ function PasswordCard() {
             />
           </label>
         </div>
-        <button
-          className="btn primary"
-          style={{ alignSelf: "flex-start" }}
-          disabled={busy}
-        >
+        <button className="btn primary self-start" disabled={busy}>
           {busy ? "Changing…" : "Change password"}
         </button>
       </form>
@@ -294,8 +286,7 @@ function EmailCard({ me, onChanged }) {
       </div>
       {step === "form" ? (
         <form
-          className="card-body stack"
-          style={{ gap: 14 }}
+          className="card-body stack gap-14"
           onSubmit={(e) => {
             e.preventDefault();
             request();
@@ -312,7 +303,7 @@ function EmailCard({ me, onChanged }) {
               (verification codes, upcoming 2FA login) can reach you.
             </div>
           )}
-          <div className="grid-2" style={{ gap: 12 }}>
+          <div className="grid-2 gap-12">
             <label className="field">
               <span>New email</span>
               <input
@@ -335,11 +326,7 @@ function EmailCard({ me, onChanged }) {
               />
             </label>
           </div>
-          <button
-            className="btn primary"
-            style={{ alignSelf: "flex-start" }}
-            disabled={requesting}
-          >
+          <button className="btn primary self-start" disabled={requesting}>
             {requesting
               ? "…"
               : me.email
@@ -349,8 +336,7 @@ function EmailCard({ me, onChanged }) {
         </form>
       ) : (
         <form
-          className="card-body stack"
-          style={{ gap: 14 }}
+          className="card-body stack gap-14"
           onSubmit={(e) => {
             e.preventDefault();
             confirm();

@@ -102,7 +102,7 @@ function UsersTab() {
             {users.map((u) => (
               <tr key={u.id} style={{ opacity: u.isBlocked ? 0.55 : 1 }}>
                 <td>
-                  <div className="row" style={{ gap: 10 }}>
+                  <div className="row">
                     <div
                       className="avatar"
                       style={{ width: 28, height: 28, fontSize: 11 }}
@@ -130,10 +130,10 @@ function UsersTab() {
                     {u.isBlocked ? "deactivated" : "active"}
                   </Badge>
                 </td>
-                <td style={{ textAlign: "right" }}>
+                <td className="text-right">
                   <div
-                    className="row"
-                    style={{ gap: 6, justifyContent: "flex-end" }}
+                    className="row gap-6"
+                    style={{ justifyContent: "flex-end" }}
                   >
                     <button
                       className="btn sm ghost"
@@ -226,8 +226,8 @@ function CreateUserModal({ roles, onClose, onDone }) {
         </>
       }
     >
-      <div className="stack" style={{ gap: 14 }}>
-        <div className="grid-2" style={{ gap: 12 }}>
+      <div className="stack gap-14">
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>Username</span>
             <input
@@ -294,7 +294,7 @@ function ActivityList({ rows }) {
                 : "var(--accent)"
           }
         >
-          <div className="row wrap" style={{ gap: 6 }}>
+          <div className="row wrap gap-6">
             <Badge color="var(--ink-3)" dot={false}>
               {r.action}
             </Badge>

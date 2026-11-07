@@ -35,7 +35,7 @@ export default function Login() {
           Zoser Admin
         </div>
 
-        <div className="stack" style={{ gap: 14 }}>
+        <div className="stack gap-14">
           <label className="field">
             <span>Username</span>
             <input
@@ -62,8 +62,8 @@ export default function Login() {
 
           {error && (
             <div
-              className="small"
-              style={{ color: "var(--danger)", fontWeight: 600 }}
+              className="small text-danger"
+              style={{ fontWeight: 600 }}
               role="alert"
             >
               {error}

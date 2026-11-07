@@ -80,10 +80,7 @@ export function RefundsTab({ filters }) {
                           <td>#{r.order_id}</td>
                           <td>{r.product_name || "—"}</td>
                           <td>{r.description || "—"}</td>
-                          <td
-                            className="num strong"
-                            style={{ color: "var(--danger)" }}
-                          >
+                          <td className="num strong text-danger">
                             −{money(r.value)}
                           </td>
                         </tr>

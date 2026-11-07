@@ -60,14 +60,13 @@ function CreateAccountCard() {
         <h3>Create account</h3>
       </div>
       <form
-        className="card-body stack"
-        style={{ gap: 14 }}
+        className="card-body stack gap-14"
         onSubmit={(e) => {
           e.preventDefault();
           create();
         }}
       >
-        <div className="grid-2" style={{ gap: 12 }}>
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>Username</span>
             <input
@@ -122,14 +121,13 @@ function CreateAccountCard() {
         </button>
 
         {created?.link && (
-          <div className="stack" style={{ gap: 8 }}>
+          <div className="stack gap-8">
             <div className="small strong" style={{ color: "var(--good)" }}>
               Profile link for “{created.username}” — program this on the cards:
             </div>
             <CopyField value={created.link} label="profile link" />
             <a
-              className="btn sm"
-              style={{ alignSelf: "flex-start" }}
+              className="btn sm self-start"
               href={created.link}
               target="_blank"
               rel="noreferrer"
@@ -173,8 +171,7 @@ function ResetPasswordCard() {
         <h3>Reset password</h3>
       </div>
       <form
-        className="card-body stack"
-        style={{ gap: 14 }}
+        className="card-body stack gap-14"
         onSubmit={(e) => {
           e.preventDefault();
           reset();
@@ -190,7 +187,7 @@ function ResetPasswordCard() {
             autoComplete="off"
           />
         </label>
-        <div className="grid-2" style={{ gap: 12 }}>
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>New password (min 8)</span>
             <input
@@ -244,8 +241,7 @@ function LookupCard() {
         <h3>Find a profile link</h3>
       </div>
       <form
-        className="card-body stack"
-        style={{ gap: 12 }}
+        className="card-body stack gap-12"
         onSubmit={(e) => {
           e.preventDefault();
           find();
@@ -265,7 +261,7 @@ function LookupCard() {
           </button>
         </div>
         {result && !result.found && (
-          <div className="small" style={{ color: "var(--danger)" }}>
+          <div className="small text-danger">
             No account with that username.
           </div>
         )}

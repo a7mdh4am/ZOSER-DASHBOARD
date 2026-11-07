@@ -40,7 +40,7 @@ export function ProfileCard({ orderId, profile, onChanged }) {
         <IconUser />
         <h3>Card profile</h3>
       </div>
-      <div className="card-body stack" style={{ gap: 10 }}>
+      <div className="card-body stack gap-10">
         <div className="small muted">
           Username:{" "}
           <span className="mono strong" style={{ color: "var(--ink)" }}>

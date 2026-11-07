@@ -64,7 +64,7 @@ export function EditDesignModal({
     const names = colorOptions.map((c) => c.name);
     const missing = value && !names.includes(value);
     return (
-      <div className="row" style={{ gap: 8 }}>
+      <div className="row gap-8">
         <span
           className="color-dot"
           style={{
@@ -140,8 +140,8 @@ export function EditDesignModal({
         </>
       }
     >
-      <div className="stack" style={{ gap: 14 }}>
-        <div className="grid-2" style={{ gap: 12 }}>
+      <div className="stack gap-14">
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>Product / design</span>
             <select
@@ -176,7 +176,7 @@ export function EditDesignModal({
               onChange={set("price")}
             />
             {noTier && (
-              <span className="small" style={{ color: "var(--danger)" }}>
+              <span className="small text-danger">
                 No preset price for {cardCount} cards — enter it manually.
               </span>
             )}
@@ -192,7 +192,7 @@ export function EditDesignModal({
             />
           </label>
         )}
-        <div className="grid-2" style={{ gap: 12 }}>
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>Anniversary date</span>
             <input
@@ -211,12 +211,12 @@ export function EditDesignModal({
         {cards.length > 0 && (
           <div className="field">
             <span>Cards — name &amp; colour</span>
-            <div className="stack" style={{ gap: 10 }}>
+            <div className="stack gap-10">
               {cards.map((c, i) => (
                 <div
                   key={c.id ?? i}
-                  className="grid-2"
-                  style={{ gap: 12, alignItems: "flex-end" }}
+                  className="grid-2 gap-12"
+                  style={{ alignItems: "flex-end" }}
                 >
                   <label className="field">
                     <span className="small muted">Card {i + 1} name</span>
