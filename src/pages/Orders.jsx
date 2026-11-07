@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Empty,
+  OrderLink,
   Pager,
   SearchInput,
   Spinner,
@@ -32,17 +33,22 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const setParam = (patch) => {
-    const next = new URLSearchParams(params);
-    Object.entries(patch).forEach(([k, v]) =>
-      v ? next.set(k, v) : next.delete(k),
+  const setParam = (patch) =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        Object.entries(patch).forEach(([k, v]) =>
+          v ? next.set(k, v) : next.delete(k),
+        );
+        if (!("page" in patch)) next.delete("page");
+        return next;
+      },
+      { replace: true },
     );
-    if (!("page" in patch)) next.delete("page");
-    setParams(next, { replace: true });
-  };
 
   useEffect(() => {
     let alive = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- dims the table while the next page/filter loads
     setLoading(true);
     setError("");
     ordersApi
@@ -67,9 +73,10 @@ export default function Orders() {
         </div>
       </div>
 
-      <div className="chips" role="tablist" aria-label="Status filter">
+      <div className="chips" role="group" aria-label="Status filter">
         <button
           className={`chip${status === "" ? " active" : ""}`}
+          aria-pressed={status === ""}
           onClick={() => setParam({ status: "" })}
         >
           All
@@ -78,6 +85,7 @@ export default function Orders() {
           <button
             key={s}
             className={`chip${status === s ? " active" : ""}`}
+            aria-pressed={status === s}
             onClick={() => setParam({ status: s })}
           >
             {statusOf(s).label}
@@ -119,8 +127,11 @@ export default function Orders() {
                 </thead>
                 <tbody>
                   {data.orders.map((o) => {
-                    const net = Number(o.price) - Number(o.discount_amount);
+                    // What the customer pays: subtotal − discount + shipping,
+                    // the same total as the order page and the shop's cart.
+                    const total = Number(o.grand_total);
                     const paid = Number(o.total_deposit);
+                    const fullyPaid = paid >= total && total > 0;
                     return (
                       <tr
                         key={o.id}
@@ -128,7 +139,9 @@ export default function Orders() {
                         onClick={() => navigate(`/orders/${o.id}`)}
                       >
                         <td>
-                          <div className="strong">#{o.id}</div>
+                          <div className="strong">
+                            <OrderLink id={o.id} />
+                          </div>
                           <div
                             className="small muted"
                             title={fmtDate(o.order_time, true)}
@@ -155,17 +168,15 @@ export default function Orders() {
                         </td>
                         <td className="num">
                           <span
-                            className={paid >= net && net > 0 ? "strong" : ""}
+                            className={fullyPaid ? "strong" : ""}
                             style={
-                              paid >= net && net > 0
-                                ? { color: "var(--good)" }
-                                : undefined
+                              fullyPaid ? { color: "var(--good)" } : undefined
                             }
                           >
                             {paid > 0 ? money(paid) : "—"}
                           </span>
                         </td>
-                        <td className="num strong">{money(net)}</td>
+                        <td className="num strong">{money(total)}</td>
                       </tr>
                     );
                   })}
@@ -176,7 +187,7 @@ export default function Orders() {
               page={page}
               perPage={data.per_page}
               total={data.total}
-              onPage={(p) => setParam({ page: String(p), q: search, status })}
+              onPage={(p) => setParam({ page: String(p) })}
             />
           </>
         )}

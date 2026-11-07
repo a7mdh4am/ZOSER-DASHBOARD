@@ -2,9 +2,11 @@
 // call from the in-memory data in ./db.js, until there's a backend to talk to.
 // ../api.js decides when it's used; delete this folder once it's no longer needed.
 //
-// It returns real Response objects in the backend's `{ data }` / `{ error }`
-// envelope, so api.js's unwrapping and error handling still run. Response shapes
-// follow _backend/src/modules/admin.
+// It returns real Response objects in a `{ data }` / `{ error }` envelope, so
+// api.js's unwrapping and error handling still run. There's no backend yet, so
+// this is the API contract a backend should implement; shapes started from the
+// draft in _backend/src/modules/admin. Business rules (totals = subtotal −
+// discount + shipping, products need a description, ...) follow the shop.
 //
 // Sign-in: any username/password works. A username from the Team page signs in
 // as that staff member (handy for checking permission-gated UI); anything else
@@ -14,7 +16,8 @@ import {
   cityOf, db, depositsOf, newestFirst, nextId, nowIso, ORDER_STATUS, orderMatchesSearch, paidOf,
   productOf, recalcTotals, round2, zoneOf,
 } from './db.js';
-import { dashboard, financeOrders, financeSection } from './reports.js';
+import { toCsv } from '../csv.js';
+import { dashboard, financeOrderRows, financeOrders, financeSection } from './reports.js';
 
 const BASE = '/api/v1/admin';
 const LATENCY_MS = 150;
@@ -95,6 +98,8 @@ export async function mockFetch(url, options = {}) {
       // A JSON string from request(), or FormData from apiUpload().
       body: typeof options.body === 'string' ? JSON.parse(options.body) : options.body,
     });
+    // A handler can answer with a ready-made Response, e.g. a CSV file.
+    if (data instanceof Response) return data;
     return jsonResponse(200, { data });
   } catch (err) {
     if (err instanceof MockError) return errorResponse(err.status, err.message);
@@ -115,27 +120,6 @@ const currentStaff = () => db.staff.find((s) => s.username === sessionUsername()
 
 const roleOf = (staff) => db.roles.find((r) => r.code === staff.role);
 
-// The app gates these pages on codes that _backend/prisma/seed.ts doesn't define.
-// Without them even the super admin couldn't reach those pages, so each one is
-// granted alongside the closest real permission.
-const UI_ONLY_PERMISSIONS = [
-  ['production.view', 'designer.view'],
-  ['users.view', 'customers'],
-  ['profiles.create', 'customers'],
-  ['catalog.themes.manage', 'themes.view'],
-  ['profiles.themes.add', 'themes.view'],
-  ['catalog.products.update', 'products.view'],
-  ['coupons.manage', 'coupons.view'],
-  ['admins.create', 'team.manage'],
-  ['admins.roles.manage', 'roles.manage'],
-];
-
-function effectivePermissions(staff) {
-  const granted = roleOf(staff)?.permissions ?? [];
-  const extra = UI_ONLY_PERMISSIONS.filter(([real]) => granted.includes(real)).map(([, uiOnly]) => uiOnly);
-  return [...new Set([...granted, ...extra])];
-}
-
 const publicAdmin = (staff) => ({
   id: staff.id,
   username: staff.username,
@@ -148,7 +132,7 @@ const publicAdmin = (staff) => ({
 on('GET', '/auth/me', () => {
   const staff = currentStaff();
   return {
-    admin: staff ? { ...publicAdmin(staff), permissions: effectivePermissions(staff) } : null,
+    admin: staff ? { ...publicAdmin(staff), permissions: roleOf(staff)?.permissions ?? [] } : null,
     csrfToken: 'dummy-csrf-token',
   };
 });
@@ -220,6 +204,8 @@ on('GET', '/orders', ({ query }) => {
       shipping_id: o.shipping_id,
       price: o.subtotal,
       discount_amount: o.discount_amount,
+      shipping_fee: o.shipping_fee,
+      grand_total: o.grand_total,
       total_deposit: paidOf(o),
     })),
     total: rows.length,
@@ -258,6 +244,7 @@ on('GET', '/orders/:id', ({ params }) => {
     financial: {
       gross: order.subtotal,
       discount: order.discount_amount,
+      shipping: order.shipping_fee,
       net_total: order.grand_total,
       remaining: round2(order.grand_total - paidOf(order)),
     },
@@ -432,7 +419,10 @@ on('POST', '/production/orders/:id/status', ({ params }) => {
 /* ------------------------------------------------------------------ */
 
 // Registered before /finance/:section so the literal paths win.
-on('GET', '/finance/orders', ({ query }) => financeOrders(query));
+// format=csv: every matching order (not one page) as a file download.
+on('GET', '/finance/orders', ({ query }) => (query.format === 'csv'
+  ? new Response(toCsv(financeOrderRows(query)), { headers: { 'Content-Type': 'text/csv; charset=utf-8' } })
+  : financeOrders(query)));
 
 on('GET', '/finance/:section', ({ params, query }) => {
   const report = financeSection(params.section, query);
@@ -491,16 +481,22 @@ on('DELETE', '/products/card-price-tiers/:id', ({ params }) => {
 
 on('GET', '/products/:id', ({ params }) => findProduct(params.id));
 
+// The shop shows every design's description next to it.
+function requireDescription(description) {
+  if (!String(description ?? '').trim()) throw new MockError(422, 'A description is required — the shop shows it with the design');
+}
+
 on('POST', '/products', ({ body }) => {
   if (db.products.some((p) => p.slug === body.slug)) throw conflict('A design with this slug already exists');
+  requireDescription(body.description);
   const product = {
     id: nextId(),
     name: body.name,
     slug: body.slug,
-    description: body.description ?? '',
+    description: body.description,
     product_types: { code: body.typeCode, name: 'NFC card' },
     is_active: true,
-    in_stock: true,
+    in_stock: body.inStock ?? true,
     is_new: Boolean(body.isNew),
     is_limited: Boolean(body.isLimited),
     quantity: body.quantity ?? 0,
@@ -515,6 +511,7 @@ on('POST', '/products', ({ body }) => {
 
 on('PATCH', '/products/:id', ({ params, body }) => {
   const product = findProduct(params.id);
+  if ('description' in body) requireDescription(body.description);
   Object.assign(product, {
     name: body.name,
     description: body.description,
@@ -617,27 +614,12 @@ on('DELETE', '/coupons/:id', ({ params }) => {
 
 const findUser = (id) => findOr404(db.users, id, 'Customer');
 
-const customerRow = ({ id, username, name, is_blocked, created_at }) => ({
-  id, username, name, email: `${username}@example.com`, phone_number: null, is_blocked, is_locked: false, deleted_at: null, created_at,
-});
-
-// Literal path first: otherwise /customers/:id would match "lookup" as an id.
 on('GET', '/customers/lookup', ({ query }) => {
   const user = db.users.find((u) => u.username === query.username);
   if (!user) return { found: false };
   if (!user.pid) return { found: true, userId: user.id, link: null, themes: [] };
   return { found: true, userId: user.id, link: profileLink(user.pid), themes: themeStatuses(user) };
 });
-
-on('GET', '/customers', ({ query }) => {
-  const perPage = Number(query.perPage) || 25;
-  const pageNumber = Number(query.page) || 1;
-  const term = (query.search ?? '').toLowerCase();
-  const rows = db.users.filter((u) => `${u.username} ${u.name}`.toLowerCase().includes(term));
-  return { customers: page(rows, pageNumber, perPage).map(customerRow), total: rows.length, page: pageNumber, perPage };
-});
-
-on('GET', '/customers/:id', ({ params }) => customerRow(findUser(params.id)));
 
 on('POST', '/customers', ({ body }) => {
   if (db.users.some((u) => u.username === body.username)) throw conflict('Username already taken');
@@ -650,36 +632,9 @@ on('POST', '/customers', ({ body }) => {
   return { username: user.username, userId: user.id, link: profileLink(pid) };
 });
 
-on('POST', '/customers/:id/block', ({ params, body }) => {
-  const user = findUser(params.id);
-  user.is_blocked = body.isBlocked;
-  return customerRow(user);
-});
-
 on('POST', '/customers/:id/password-reset', ({ params }) => {
   findUser(params.id);
   return { reset: true };
-});
-
-on('POST', '/customers/:id/delete', ({ params }) => {
-  removeFrom(db.users, findUser(params.id));
-  return { deleted: true };
-});
-
-on('GET', '/customers/:id/activity', ({ params, query }) => {
-  const user = findUser(params.id);
-  const perPage = Number(query.perPage) || 30;
-  const pageNumber = Number(query.page) || 1;
-  const events = db.orders
-    .filter((o) => o.profile_pid && o.profile_pid === user.pid)
-    .map((o) => ({
-      type: 'order_placed',
-      createdAt: o.order_time,
-      detail: { orderId: o.id, status: o.status, grandTotal: o.grand_total },
-    }));
-  return {
-    user: customerRow(user), events: page(events, pageNumber, perPage), total: events.length, page: pageNumber, perPage,
-  };
 });
 
 /* ------------------------------------------------------------------ */

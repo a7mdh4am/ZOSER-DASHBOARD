@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AreaChart, BarList, StatCard } from '../components/charts.jsx';
-import { Empty, Spinner, StatusBadge } from '../components/ui.jsx';
+import { Empty, OrderLink, Spinner, StatusBadge } from '../components/ui.jsx';
 import { IconRefresh } from '../components/Icons.jsx';
 import { dashboardApi } from '../lib/api.js';
+import { localISODate } from '../lib/dates.js';
 import { fmtDate, money, statusOf, STATUS_ORDER } from '../lib/format.js';
 
 const shortMoney = (v) => {
@@ -39,8 +40,7 @@ export default function Dashboard() {
     for (let i = 29; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      const row = byDay[key];
+      const row = byDay[localISODate(d)];
       out.push({
         x: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
         y: row ? Number(metric === 'revenue' ? row.revenue : row.order_count) : 0,
@@ -95,9 +95,9 @@ export default function Dashboard() {
         <div className="card-head">
           <h3>Last 30 days</h3>
           <div className="grow" />
-          <div className="seg" role="tablist" aria-label="Metric">
-            <button className={metric === 'revenue' ? 'active' : ''} onClick={() => setMetric('revenue')}>Revenue</button>
-            <button className={metric === 'orders' ? 'active' : ''} onClick={() => setMetric('orders')}>Orders</button>
+          <div className="seg" role="group" aria-label="Metric">
+            <button className={metric === 'revenue' ? 'active' : ''} aria-pressed={metric === 'revenue'} onClick={() => setMetric('revenue')}>Revenue</button>
+            <button className={metric === 'orders' ? 'active' : ''} aria-pressed={metric === 'orders'} onClick={() => setMetric('orders')}>Orders</button>
           </div>
           <button className="btn ghost icon" onClick={load} title="Refresh" aria-label="Refresh"><IconRefresh /></button>
         </div>
@@ -150,7 +150,7 @@ export default function Dashboard() {
                 {data.recent_orders.map((o) => (
                   <tr key={o.id} className="row-link" onClick={() => navigate(`/orders/${o.id}`)}>
                     <td>
-                      <div className="strong">#{o.id}</div>
+                      <div className="strong"><OrderLink id={o.id} /></div>
                       <div className="small muted">{fmtDate(o.order_time)}</div>
                     </td>
                     <td>

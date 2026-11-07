@@ -1,18 +1,22 @@
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
+
+// SVG coordinate space; the charts scale to their container's width.
+const W = 640;
+const AREA_PAD = { top: 12, right: 8, bottom: 24, left: 44 };
 
 /**
  * Single-series area/line chart (SVG) with crosshair + tooltip.
  * data: [{ x: label, y: number }]; formatY formats tooltip/axis values.
  */
 export function AreaChart({ data, formatY = (v) => v, height = 220, color = 'var(--accent)' }) {
-  const wrapRef = useRef(null);
   const [hover, setHover] = useState(null); // index
+  // Unique per chart: a shared id would make every chart on the page use the
+  // first one's gradient (and color).
+  const gradientId = `area-fill-${useId().replace(/[^\w-]/g, '')}`;
 
-  const W = 640;
   const H = height;
-  const PAD = { top: 12, right: 8, bottom: 24, left: 44 };
 
-  const { points, ticks, maxY } = useMemo(() => {
+  const { points, ticks } = useMemo(() => {
     const ys = data.map((d) => d.y);
     const rawMax = Math.max(1, ...ys);
     // round the axis max up to a friendly step
@@ -20,27 +24,27 @@ export function AreaChart({ data, formatY = (v) => v, height = 220, color = 'var
     const niced = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((m) => m >= rawMax / 4) ?? mag;
     const maxY = Math.ceil(rawMax / niced) * niced;
 
-    const iw = W - PAD.left - PAD.right;
-    const ih = H - PAD.top - PAD.bottom;
+    const iw = W - AREA_PAD.left - AREA_PAD.right;
+    const ih = H - AREA_PAD.top - AREA_PAD.bottom;
     const n = Math.max(1, data.length - 1);
     const points = data.map((d, i) => ({
       ...d,
-      px: PAD.left + (i / n) * iw,
-      py: PAD.top + ih - (d.y / maxY) * ih,
+      px: AREA_PAD.left + (i / n) * iw,
+      py: AREA_PAD.top + ih - (d.y / maxY) * ih,
     }));
 
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => ({
       v: maxY * f,
-      py: PAD.top + ih - f * ih,
+      py: AREA_PAD.top + ih - f * ih,
     }));
 
-    return { points, ticks, maxY };
+    return { points, ticks };
   }, [data, H]);
 
   if (!data.length) return null;
 
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${p.px.toFixed(1)},${p.py.toFixed(1)}`).join('');
-  const area = `${line}L${points.at(-1).px.toFixed(1)},${H - PAD.bottom}L${points[0].px.toFixed(1)},${H - PAD.bottom}Z`;
+  const area = `${line}L${points.at(-1).px.toFixed(1)},${H - AREA_PAD.bottom}L${points[0].px.toFixed(1)},${H - AREA_PAD.bottom}Z`;
 
   const onMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -60,7 +64,7 @@ export function AreaChart({ data, formatY = (v) => v, height = 220, color = 'var
   const labelIdx = new Set([0, Math.floor((data.length - 1) / 2), data.length - 1]);
 
   return (
-    <div className="viz-root" ref={wrapRef}>
+    <div className="viz-root">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         style={{ width: '100%', height: 'auto', display: 'block', touchAction: 'pan-y' }}
@@ -74,7 +78,7 @@ export function AreaChart({ data, formatY = (v) => v, height = 220, color = 'var
         aria-label="Trend chart"
       >
         <defs>
-          <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity="0.22" />
             <stop offset="100%" stopColor={color} stopOpacity="0.02" />
           </linearGradient>
@@ -82,14 +86,14 @@ export function AreaChart({ data, formatY = (v) => v, height = 220, color = 'var
 
         {ticks.map((t) => (
           <g key={t.v}>
-            <line x1={PAD.left} x2={W - PAD.right} y1={t.py} y2={t.py} stroke="var(--grid)" strokeWidth="1" />
-            <text x={PAD.left - 8} y={t.py + 4} textAnchor="end" fontSize="10.5" fill="var(--ink-3)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <line x1={AREA_PAD.left} x2={W - AREA_PAD.right} y1={t.py} y2={t.py} stroke="var(--grid)" strokeWidth="1" />
+            <text x={AREA_PAD.left - 8} y={t.py + 4} textAnchor="end" fontSize="10.5" fill="var(--ink-3)" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {formatY(t.v)}
             </text>
           </g>
         ))}
 
-        <path d={area} fill="url(#areaFill)" />
+        <path d={area} fill={`url(#${gradientId})`} />
         <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
 
         {points.map((p, i) => labelIdx.has(i) && (
@@ -100,7 +104,7 @@ export function AreaChart({ data, formatY = (v) => v, height = 220, color = 'var
 
         {hp && (
           <g>
-            <line x1={hp.px} x2={hp.px} y1={PAD.top} y2={H - PAD.bottom} stroke="var(--ink-3)" strokeWidth="1" strokeDasharray="3 3" />
+            <line x1={hp.px} x2={hp.px} y1={AREA_PAD.top} y2={H - AREA_PAD.bottom} stroke="var(--ink-3)" strokeWidth="1" strokeDasharray="3 3" />
             <circle cx={hp.px} cy={hp.py} r="4.5" fill={color} stroke="var(--surface)" strokeWidth="2" />
           </g>
         )}
@@ -129,7 +133,7 @@ export function BarList({ data, formatV = (v) => v, color = 'var(--accent)' }) {
   return (
     <div className="barlist">
       {data.map((d) => (
-        <div className="bl-row" key={d.name} title={`${d.name}: ${formatV(d.value)}`}>
+        <div className="bl-row" key={d.id ?? d.name} title={`${d.name}: ${formatV(d.value)}`}>
           <span className="bl-name">{d.name}</span>
           <div className="bl-track">
             <div
@@ -154,15 +158,16 @@ export function Donut({ data, formatV = (v) => v, size = 168 }) {
 
   const R = 48;
   const C = 2 * Math.PI * R;
-  let acc = 0;
+  // Where each slice starts, as a fraction of the circle (running total).
+  const fractions = data.map((d) => d.value / total);
+  const starts = fractions.map((_, i) => fractions.slice(0, i).reduce((sum, f) => sum + f, 0));
 
   return (
     <div className="donut-wrap">
       <svg width={size} height={size} viewBox="0 0 120 120" role="img" aria-label="Share chart">
         {data.map((d, i) => {
-          const frac = d.value / total;
-          const dash = Math.max(0, frac * C - 2); // 2px gap between slices
-          const el = (
+          const dash = Math.max(0, fractions[i] * C - 2); // 2px gap between slices
+          return (
             <circle
               key={d.name}
               cx="60" cy="60" r={R}
@@ -170,12 +175,10 @@ export function Donut({ data, formatV = (v) => v, size = 168 }) {
               stroke={d.color}
               strokeWidth="14"
               strokeDasharray={`${dash} ${C - dash}`}
-              strokeDashoffset={-acc * C + C / 4}
+              strokeDashoffset={-starts[i] * C + C / 4}
               strokeLinecap="butt"
             />
           );
-          acc += frac;
-          return el;
         })}
         <text x="60" y="57" textAnchor="middle" fontSize="15" fontWeight="700" fill="var(--ink)">
           {formatV(total)}
@@ -202,7 +205,6 @@ export function Donut({ data, formatV = (v) => v, size = 168 }) {
 export function GroupedBars({ data, series, formatV = (v) => v, height = 220 }) {
   const [hover, setHover] = useState(null);
 
-  const W = 640;
   const H = height;
   const PAD = { top: 14, right: 8, bottom: 24, left: 48 };
 

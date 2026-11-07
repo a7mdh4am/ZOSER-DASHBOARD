@@ -35,7 +35,7 @@ export default function App() {
   const home = can('dashboard.view') ? '/'
     : can('orders.view') ? '/orders'
     : can('designer.view') ? '/designer'
-    : can('customers') ? '/customers'
+    : can('customers.view') ? '/customers'
     : can('themes.view') ? '/themes'
     : can('products.view') ? '/products'
     : can('coupons.view') ? '/coupons'
@@ -51,7 +51,7 @@ export default function App() {
         {can('orders.view') && <Route path="/orders" element={<Orders />} />}
         {can('orders.view') && <Route path="/orders/:id" element={<OrderDetail />} />}
         {can('designer.view') && <Route path="/designer" element={<Designer />} />}
-        {can('customers') && <Route path="/customers" element={<Customers />} />}
+        {can('customers.view') && <Route path="/customers" element={<Customers />} />}
         {can('themes.view') && <Route path="/themes" element={<Themes />} />}
         {can('products.view') && <Route path="/products" element={<Products />} />}
         {can('coupons.view') && <Route path="/coupons" element={<Coupons />} />}

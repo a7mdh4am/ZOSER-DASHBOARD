@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 // Deployed at the admin subdomain's root (e.g. admin.zoser.shop) — split out
 // of the legacy _admin/frontend/spa into _frontend/admin, see _frontend/README.md.
-export default defineConfig(({ command }) => ({
+export default defineConfig({
   plugins: [react()],
   base: '/',
   build: {
@@ -21,4 +21,4 @@ export default defineConfig(({ command }) => ({
       '/media': 'http://127.0.0.1:4000',
     },
   },
-}));
+});

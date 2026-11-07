@@ -1,8 +1,14 @@
 // Dashboard and Finance reports for the dummy admin API. Computed from the
 // same orders and ledger the other endpoints read, so totals agree between
 // pages and a write (deposit, expense, unit cost, ...) shows up in them.
-// Definitions follow the formulas listed on the Finance page itself.
+// Definitions follow the formulas listed on the Finance page itself. "Net
+// revenue" is subtotal − discounts everywhere (shipping is reported on its
+// own), while an order's total is what the customer pays, shipping included.
+//
+// Days, weeks and months are calendar days where the staff are (the browser's
+// time zone), the same days the Finance date presets pick.
 
+import { localISODate } from '../dates.js';
 import {
   cityOf, db, newestFirst, ORDER_STATUS, orderMatchesSearch, paidOf, paymentStatus, productOf, round2, sum, zoneOf,
 } from './db.js';
@@ -24,16 +30,19 @@ function groupBy(list, keyOf) {
   return groups;
 }
 
+const localDay = (iso) => localISODate(new Date(iso));
+
 /** Bucket key for an ISO timestamp; sorts chronologically as a plain string. */
 function periodKey(iso, granularity = 'month') {
-  if (granularity === 'day') return iso.slice(0, 10);
-  if (granularity === 'year') return iso.slice(0, 4);
+  const day = localDay(iso);
+  if (granularity === 'day') return day;
+  if (granularity === 'year') return day.slice(0, 4);
   if (granularity === 'week') {
     const monday = new Date(iso);
-    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
-    return monday.toISOString().slice(0, 10);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    return localISODate(monday);
   }
-  return iso.slice(0, 7);
+  return day.slice(0, 7);
 }
 
 const sortedPeriods = (...lists) => [...new Set(lists.flat())].sort();
@@ -43,7 +52,7 @@ const sortedPeriods = (...lists) => [...new Set(lists.flat())].sort();
 /* ------------------------------------------------------------------ */
 
 function inDateRange(iso, query) {
-  const day = iso.slice(0, 10);
+  const day = localDay(iso);
   return (!query.from || day >= query.from) && (!query.to || day <= query.to);
 }
 
@@ -85,8 +94,8 @@ export function dashboard() {
   const live = db.orders.filter(isLive);
   const thisMonth = periodKey(new Date().toISOString());
   const lastMonthDate = new Date();
-  lastMonthDate.setUTCDate(1);
-  lastMonthDate.setUTCMonth(lastMonthDate.getUTCMonth() - 1);
+  lastMonthDate.setDate(1);
+  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
   const lastMonth = periodKey(lastMonthDate.toISOString());
   const inMonth = (list, month) => list.filter((o) => periodKey(o.order_time) === month);
   const statusCount = (...statuses) => countWhere(db.orders, (o) => statuses.includes(o.status));
@@ -96,12 +105,12 @@ export function dashboard() {
 
   return {
     summary: {
-      net_revenue: sum(live, (o) => o.grand_total),
+      net_revenue: sum(live, netOf),
       total_orders: db.orders.length,
       this_month_orders: inMonth(db.orders, thisMonth).length,
       last_month_orders: inMonth(db.orders, lastMonth).length,
-      this_month_revenue: sum(inMonth(live, thisMonth), (o) => o.grand_total),
-      last_month_revenue: sum(inMonth(live, lastMonth), (o) => o.grand_total),
+      this_month_revenue: sum(inMonth(live, thisMonth), netOf),
+      last_month_revenue: sum(inMonth(live, lastMonth), netOf),
       deposits_collected: sum(db.ledger.filter((e) => e.type === 'deposit'), (e) => e.value),
       deposited_orders: statusCount(DEPOSITED),
       production_orders: statusCount(PRODUCTION),
@@ -111,7 +120,7 @@ export function dashboard() {
     daily_series: [...byDay].map(([day, orders]) => ({
       day,
       order_count: orders.length,
-      revenue: sum(orders.filter(isLive), (o) => o.grand_total),
+      revenue: sum(orders.filter(isLive), netOf),
     })),
     status_breakdown: [...groupBy(db.orders, (o) => o.status)]
       .map(([status, orders]) => ({ status, order_count: orders.length })),
@@ -214,6 +223,7 @@ function products(query) {
     const net = sum(rows, netOf);
     const cards = sum(rows, cardCount);
     return {
+      id: product.id,
       name: product.name,
       orders: rows.length,
       cards,
@@ -227,7 +237,7 @@ function products(query) {
     performance,
     never_sold: db.products
       .filter((p) => !byProduct.has(p.id))
-      .map((p) => ({ name: p.name, is_active: p.is_active })),
+      .map((p) => ({ id: p.id, name: p.name, is_active: p.is_active })),
   };
 }
 
@@ -369,7 +379,7 @@ function profit(query) {
 function cashflow(query) {
   const signed = (entry) => (entry.type === 'expense' ? -entry.value : entry.value);
   const opening_balance = query.from
-    ? sum(db.ledger.filter((e) => e.created_at.slice(0, 10) < query.from), signed)
+    ? sum(db.ledger.filter((e) => localDay(e.created_at) < query.from), signed)
     : 0;
   const entries = ledgerFor(query);
   const byMonth = groupBy(entries, (e) => periodKey(e.created_at));
@@ -393,13 +403,12 @@ const SECTIONS = { overview, products, customers, payments, discounts, shipping,
 /** Returns undefined for an unknown section, so the router can answer 404. */
 export const financeSection = (section, query) => SECTIONS[section]?.(query);
 
-export function financeOrders(query) {
-  const page = Number(query.page) || 1;
-  const perPage = Number(query.perPage) || 25;
+/** Every order row matching the filters, search and sort (the CSV export takes them all). */
+export function financeOrderRows(query) {
   const sortField = { id: 'id', order_time: 'order_time', net: 'net', paid: 'dep', balance: 'balance' }[query.sort] ?? 'order_time';
   const direction = query.dir === 'asc' ? 1 : -1;
 
-  const rows = ordersFor(query)
+  return ordersFor(query)
     .filter((o) => orderMatchesSearch(o, query.search))
     .map((o) => {
       const dep = paidOf(o);
@@ -422,6 +431,11 @@ export function financeOrders(query) {
       if (a[sortField] === b[sortField]) return 0;
       return (a[sortField] > b[sortField] ? 1 : -1) * direction;
     });
+}
 
+export function financeOrders(query) {
+  const page = Number(query.page) || 1;
+  const perPage = Number(query.perPage) || 25;
+  const rows = financeOrderRows(query);
   return { rows: rows.slice((page - 1) * perPage, page * perPage), page, perPage, total: rows.length };
 }

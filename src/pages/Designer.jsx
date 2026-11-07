@@ -23,16 +23,17 @@ export default function Designer() {
       .finally(() => setLoading(false));
   }, [tab, search, page]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount and on tab/search/page change; load() flags loading first
   useEffect(() => { load(); }, [load]);
 
   return (
     <div className="stack">
       <div className="row wrap">
-        <div className="seg" role="tablist" aria-label="Queue">
-          <button className={tab === '1' ? 'active' : ''} onClick={() => { setTab('1'); setPage(1); }}>
+        <div className="seg" role="group" aria-label="Queue">
+          <button className={tab === '1' ? 'active' : ''} aria-pressed={tab === '1'} onClick={() => { setTab('1'); setPage(1); }}>
             To design{data ? ` · ${data.counts.deposited}` : ''}
           </button>
-          <button className={tab === '5' ? 'active' : ''} onClick={() => { setTab('5'); setPage(1); }}>
+          <button className={tab === '5' ? 'active' : ''} aria-pressed={tab === '5'} onClick={() => { setTab('5'); setPage(1); }}>
             In production{data ? ` · ${data.counts.production}` : ''}
           </button>
         </div>
@@ -55,7 +56,11 @@ export default function Designer() {
           <div className="design-grid" style={{ opacity: loading ? 0.6 : 1 }}>
             {data.orders.map((o) => (
               <div className="card design-card" key={o.id} onClick={() => setOpenId(o.id)} role="button" tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && setOpenId(o.id)}>
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault(); // Space would also scroll the page
+                  setOpenId(o.id);
+                }}>
                 <div className="card-body" style={{ padding: 14 }}>
                   <div className="row">
                     <span className="strong" style={{ fontSize: 15 }}>#{o.id}</span>
@@ -168,7 +173,6 @@ function DesignDetail({ id, onClose, onChanged }) {
                       <div className="item-thumb" style={{ display: 'grid', placeItems: 'center', color: 'var(--ink-3)' }}>No image</div>
                     )}
                     <div className="in">
-                      {/* {it.color && <span className="color-dot" style={{ background: colorHex(it.color) || 'var(--surface-2)' }} title={it.color} />} */}
                       <span className="copy-line">{it.name}<CopyButton text={it.name} label="name" /></span>
                     </div>
                     <div className="row" style={{ gap: 6, marginTop: 2 }}>
@@ -241,7 +245,7 @@ function DesignDetail({ id, onClose, onChanged }) {
             <IconPhone />
             <span>{order.full_name} · <span className="mono">{order.phone}</span></span>
             <CopyButton text={order.phone} label="phone" />
-            <a className="copy-btn" style={{ color: 'var(--st-shipped)' }} href={waLink(order.phone)} target="_blank" rel="noreferrer" title="WhatsApp">
+            <a className="copy-btn" style={{ color: 'var(--st-shipped)' }} href={waLink(order.phone)} target="_blank" rel="noreferrer" title="WhatsApp" aria-label="Message on WhatsApp">
               <IconWhatsapp />
             </a>
           </div>

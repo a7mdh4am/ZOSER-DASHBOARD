@@ -71,11 +71,6 @@ export function AuthProvider({ children }) {
     logout,
     refreshUser,
     can,
-    // Designer-only shell: has the Design Studio but no dashboard view.
-    // PRODUCTION_STAFF also legitimately holds orders.view (order context
-    // inside a production item), so that's no longer part of this check.
-    isDesigner: can('production.view') && !can('dashboard.view'),
-    canModerate: can('orders.view'),
   }), [user, ready, login, logout, refreshUser, can]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

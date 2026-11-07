@@ -8,6 +8,7 @@
 // @example.com emails, .example links, documentation-range IPs.
 
 import { colorHex } from '../format.js';
+import { PERMISSIONS } from '../permissions.js';
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -53,94 +54,43 @@ export function placeholderImage(label, background = '#d9d4cc') {
 }
 
 /* ------------------------------------------------------------------ */
-/* roles + staff (mirrors _backend/prisma/seed.ts)                     */
+/* roles + staff                                                       */
 /* ------------------------------------------------------------------ */
 
-const PERMISSION_CATALOG = [
-  ['orders.view', 'View orders and their details'],
-  ['orders.status.update', 'Change order status'],
-  ['orders.details.update', 'Edit order items / customization'],
-  ['orders.customer_info.update', 'Edit customer contact info on an order'],
-  ['orders.shipping.update', 'Edit shipping address / city / zone / tracking ref'],
-  ['orders.delete', 'Delete an order'],
-  ['orders.adjustments.add', 'Add post-order extra fees or goodwill discounts'],
-  ['orders.payment_link.send', 'Generate and send Paymob payment links'],
-  ['orders.shipment.create', 'Create a shipment for an order'],
-  ['orders.shipment.status.update', 'Update a shipment status'],
-  ['payments.view', 'View payment attempts and statuses'],
-  ['finance.view', 'View finance log'],
-  ['finance.deposit.add', 'Record deposits'],
-  ['finance.entry.add', 'Record income/expense entries'],
-  ['finance.refund.execute', 'Execute refunds'],
-  ['finance.costs.manage', 'Set per-product unit costs'],
-  ['coupons.manage', 'Create/disable/delete discount coupons'],
-  ['production.view', 'View production records'],
-  ['production.notes.add', 'Add production notes'],
-  ['production.images.add', 'Upload WIP production photos'],
-  ['production.status.update', 'Move an order from Deposited to Production'],
-  ['catalog.products.add', 'Add products/designs (incl. colors, images, variants)'],
-  ['catalog.products.update', 'Edit products/designs'],
-  ['catalog.products.delete', 'Delete/retire products'],
-  ['catalog.prices.update', 'Edit tier/variant/extra prices'],
-  ['catalog.extras.manage', 'Manage extras catalog'],
-  ['catalog.themes.manage', 'Create/edit/disable site and purchasable profile themes'],
-  ['shipping.geo.manage', 'Manage countries, cities, zones, shipping fees'],
-  ['cards.provision', 'Generate card uuids / write NFC cards'],
-  ['cards.assign.update', 'Re-link, lock or unlock cards'],
-  ['profiles.create', 'Create profiles for orders'],
-  ['profiles.update', 'Edit profile settings (type, max_cards, anniversary)'],
-  ['profiles.themes.add', 'Grant or remove themes on a profile'],
-  ['users.view', 'View user accounts'],
-  ['users.block', 'Block/unblock user accounts'],
-  ['users.password.reset', 'Reset a user account password'],
-  ['users.delete', 'Soft-delete user accounts'],
-  ['users.activity.view', "View a customer's account and order activity history"],
-  ['admins.create', 'Create employee accounts'],
-  ['admins.update', 'Edit employee accounts'],
-  ['admins.block', 'Block/unblock employee accounts (instant lockout)'],
-  ['admins.role.assign', "Change an employee's role (instant effect)"],
-  ['admins.roles.manage', 'Create/edit/delete custom staff roles'],
-  ['admin_logs.view', 'Read the staff activity/audit log (all admins)'],
-  ['dashboard.view', 'View the KPI dashboard'],
-  ['marketing.announcements.manage', 'Manage announcements'],
-  ['marketing.newsletter.manage', 'Manage newsletter subscribers'],
-  ['feedback.view', 'View ratings and contact messages'],
-].map(([code, description]) => ({ code, description }));
-
-const ALL_PERMISSIONS = PERMISSION_CATALOG.map((p) => p.code);
+// The dashboard owns the permission codes (../permissions.js); every role
+// below is built only from them.
+const ALL_PERMISSIONS = PERMISSIONS.map((p) => p.code);
 
 const ROLES = [
-  ['SUPER_ADMIN', 'Super Admin', 'Full access to everything, manages admin accounts and roles', ALL_PERMISSIONS],
+  ['SUPER_ADMIN', 'Super Admin', 'Full access to everything, manages staff accounts and roles', ALL_PERMISSIONS],
   ['OPERATIONS_MANAGER', 'Operations Manager', 'Runs day-to-day orders, shipping and production', [
-    'orders.view', 'orders.status.update', 'orders.details.update', 'orders.customer_info.update',
-    'orders.shipping.update', 'orders.adjustments.add', 'orders.shipment.create', 'orders.shipment.status.update',
-    'payments.view', 'production.view', 'production.notes.add', 'production.images.add',
-    'shipping.geo.manage', 'users.view', 'feedback.view', 'dashboard.view',
+    'dashboard.view', 'orders.view', 'orders.status.update', 'orders.details.update', 'orders.customer_info.update',
+    'orders.shipment.create', 'orders.shipment.status.update', 'designer.view', 'production.notes.add',
+    'customers.view', 'users.view',
   ]],
-  ['ORDER_AGENT', 'Order Agent', 'Handles order status and customer/shipping corrections', [
-    'orders.view', 'orders.status.update', 'orders.customer_info.update', 'orders.shipping.update',
-    'production.view', 'orders.shipment.create', 'orders.shipment.status.update',
+  ['ORDER_AGENT', 'Order Agent', 'Handles order status, customer details and shipments', [
+    'orders.view', 'orders.status.update', 'orders.customer_info.update', 'orders.shipment.create',
+    'orders.shipment.status.update', 'designer.view',
   ]],
-  ['FINANCE_MANAGER', 'Finance Manager', 'Finance ledger, deposits, fees, payment links, coupons', [
-    'finance.view', 'finance.deposit.add', 'finance.entry.add', 'finance.refund.execute', 'finance.costs.manage',
-    'coupons.manage', 'payments.view', 'orders.view', 'orders.adjustments.add', 'orders.payment_link.send',
+  ['FINANCE_MANAGER', 'Finance Manager', 'Finance reports, deposits, ledger entries, costs and coupons', [
+    'dashboard.view', 'orders.view', 'finance.view', 'finance.deposit.add', 'finance.entry.add', 'finance.costs.manage',
+    'coupons.view', 'coupons.manage',
+  ]],
+  ['PRODUCTION_STAFF', 'Production Staff', 'Designs the cards and adds production notes', [
+    'orders.view', 'designer.view', 'production.notes.add',
+  ]],
+  ['CATALOG_MANAGER', 'Catalog Manager', 'Designs, colors, prices and themes', [
+    'products.view', 'catalog.products.add', 'catalog.products.update', 'catalog.prices.update',
+    'themes.view', 'catalog.themes.manage',
+  ]],
+  ['SUPPORT_AGENT', 'Support Agent', 'Customer accounts, passwords and profile themes', [
+    'customers.view', 'users.view', 'users.password.reset', 'themes.view', 'profiles.themes.add',
+  ]],
+  ['CARD_PROVISIONER', 'Card Provisioner', 'Creates customer accounts and order profiles', [
+    'orders.view', 'customers.view', 'profiles.create',
+  ]],
+  ['MARKETING', 'Marketing', 'Read-only access to the dashboard', [
     'dashboard.view',
-  ]],
-  ['PRODUCTION_STAFF', 'Production Staff', 'Production notes and work-in-progress photos', [
-    'production.view', 'production.notes.add', 'production.images.add', 'production.status.update', 'orders.view',
-  ]],
-  ['CATALOG_MANAGER', 'Catalog Manager', 'Products, colors, variants, prices, extras', [
-    'catalog.products.add', 'catalog.products.update', 'catalog.products.delete', 'catalog.prices.update',
-    'catalog.extras.manage', 'catalog.themes.manage', 'marketing.announcements.manage',
-  ]],
-  ['SUPPORT_AGENT', 'Support Agent', 'Customer accounts, profile assistance, feedback', [
-    'users.view', 'users.block', 'users.password.reset', 'profiles.update', 'profiles.themes.add', 'feedback.view',
-  ]],
-  ['CARD_PROVISIONER', 'Card Provisioner', 'Writes NFC cards and creates/links profiles', [
-    'cards.provision', 'cards.assign.update', 'profiles.create', 'orders.view',
-  ]],
-  ['MARKETING', 'Marketing', 'Announcements, newsletter, feedback review', [
-    'marketing.announcements.manage', 'marketing.newsletter.manage', 'feedback.view',
   ]],
 ].map(([code, name, description, permissions]) => ({
   id: nextId(), code, name, description, isSystem: code === 'SUPER_ADMIN', permissions: [...permissions],
@@ -488,7 +438,7 @@ const SESSIONS = [
 /* ------------------------------------------------------------------ */
 
 export const db = {
-  permissionCatalog: PERMISSION_CATALOG,
+  permissionCatalog: PERMISSIONS,
   roles: ROLES,
   staff: STAFF,
   cities: CITIES,

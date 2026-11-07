@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { IconKey, IconPlus } from '../components/Icons.jsx';
 import { Empty, Modal, Spinner } from '../components/ui.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import { useAction } from '../hooks/useAction.js';
 import { rolesApi } from '../lib/api.js';
 
 /** Groups a flat permission code list by its prefix before the first dot (e.g. "orders.view" -> "orders"). */
@@ -28,16 +29,16 @@ export default function Roles() {
   );
   useEffect(() => { load(); }, [load]);
 
-  const remove = async (role) => {
+  const [remove] = useAction(async (role) => {
     if (!window.confirm(`Delete the "${role.name}" role?`)) return;
     try {
       await rolesApi.remove(role.id);
       toast(`${role.name} deleted`);
-      load();
+      await load();
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
   if (error) return <Empty title="Couldn't load roles" hint={error} />;
   if (!data) return <div style={{ padding: 60 }}><Spinner /></div>;

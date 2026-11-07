@@ -2,16 +2,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AreaChart, BarList, Donut, GroupedBars, StatCard } from '../components/charts.jsx';
 import { IconDownload, IconPlus, IconRefresh } from '../components/Icons.jsx';
-import { Can, Empty, Modal, Pager, SearchInput, Spinner, StatusBadge } from '../components/ui.jsx';
+import { Can, Empty, Modal, OrderLink, Pager, SearchInput, Spinner, StatusBadge } from '../components/ui.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import { useAction } from '../hooks/useAction.js';
 import { financeApi } from '../lib/api.js';
+import { datedFileName, downloadCsv, saveFile } from '../lib/csv.js';
+import { localISODate } from '../lib/dates.js';
 import { fmtDate, money, statusOf, STATUS_ORDER } from '../lib/format.js';
 
 /* ------------------------------------------------------------------ */
 /* helpers                                                             */
 /* ------------------------------------------------------------------ */
-
-const FINANCE_BASE = '/api/v1/admin/finance';
 
 const shortMoney = (v) => {
   const n = Number(v) || 0;
@@ -36,7 +37,7 @@ const PRESETS = [
 ];
 
 function presetRange(preset) {
-  const iso = (d) => d.toISOString().slice(0, 10);
+  const iso = localISODate;
   const now = new Date();
   if (preset === 'all') return { from: '', to: '' };
   if (preset === 'mtd') return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: iso(now) };
@@ -54,31 +55,18 @@ function qs(filters, extra = {}) {
   return p.toString();
 }
 
-/** Client-side CSV download for any array of objects. */
-function downloadCsv(name, rows) {
-  if (!rows.length) return;
-  const cols = Object.keys(rows[0]);
-  const esc = (v) => {
-    const s = String(v ?? '');
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const csv = '﻿' + [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${name}-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-/** Fetch a finance section with a per-session cache keyed by URL. */
+/**
+ * Fetch a finance section, cached by section + query so switching tabs back
+ * and forth is instant. The cache is emptied when you leave the Finance page
+ * (see Finance below), so edits made elsewhere show up when you come back.
+ */
 const sectionCache = new Map();
 function useSection(section, filters, extra = {}) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const query = qs(filters, extra);
-  const url = `${FINANCE_BASE}/${section}?${query}`;
+  const url = `${section}?${query}`;
 
   const load = useCallback((fresh = false) => {
     setLoading(true);
@@ -92,8 +80,9 @@ function useSection(section, filters, extra = {}) {
       .then((d) => { sectionCache.set(url, d); setData(d); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [url]);
+  }, [section, query, url]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount and on filter change; load() flags loading first
   useEffect(() => { load(); }, [load]);
 
   return { data, error, loading, reload: () => { sectionCache.delete(url); return load(true); } };
@@ -139,6 +128,9 @@ export default function Finance() {
   const [filters, setFilters] = useState({ from: '', to: '', status: '', productId: '', cityId: '' });
   const [options, setOptions] = useState({ cities: [], products: [] });
 
+  // A deposit or status change made on an order page should show here next time.
+  useEffect(() => () => sectionCache.clear(), []);
+
   const applyPreset = (p) => {
     setPreset(p);
     // 'custom' keeps the current from/to and lets the user pick them below.
@@ -152,7 +144,7 @@ export default function Finance() {
 
   return (
     <div className="stack">
-      {/* global filters */}
+      {/* filters shared by every tab */}
       <div className="row wrap no-print">
         <div className="chips" style={{ flex: '1 1 auto' }}>
           {PRESETS.map(([v, l]) => (
@@ -197,9 +189,9 @@ export default function Finance() {
       </div>
 
       {/* tabs */}
-      <div className="chips no-print" role="tablist" aria-label="Finance sections">
+      <div className="chips no-print" role="group" aria-label="Finance sections">
         {TABS.map(([v, l]) => (
-          <button key={v} className={`chip${tab === v ? ' active' : ''}`} onClick={() => setTab(v)}>{l}</button>
+          <button key={v} className={`chip${tab === v ? ' active' : ''}`} aria-pressed={tab === v} onClick={() => setTab(v)}>{l}</button>
         ))}
       </div>
 
@@ -296,7 +288,7 @@ function OverviewTab({ filters, onOptions }) {
                     <button key={v} className={metric === v ? 'active' : ''} onClick={() => setMetric(v)}>{lbl}</button>
                   ))}
                 </div>
-                <button className="btn ghost icon" onClick={hook.reload} title="Refresh"><IconRefresh /></button>
+                <button className="btn ghost icon" onClick={hook.reload} title="Refresh" aria-label="Refresh"><IconRefresh /></button>
               </div>
               <div className="card-body">
                 {series.length ? (
@@ -316,7 +308,7 @@ function OverviewTab({ filters, onOptions }) {
                 <div className="card-head"><h3>Order mix by status</h3></div>
                 <div className="card-body">
                   <Donut
-                    data={d.breakdowns.by_status
+                    data={[...d.breakdowns.by_status] // a copy: d is shared with the section cache
                       .sort((a, b) => STATUS_ORDER.indexOf(String(a.status)) - STATUS_ORDER.indexOf(String(b.status)))
                       .map((r) => ({ name: statusOf(r.status).label, value: Number(r.orders), color: statusOf(r.status).color }))}
                     formatV={(v) => Math.round(v).toLocaleString()}
@@ -349,8 +341,18 @@ function OrdersTab({ filters }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const toast = useToast();
 
   const query = qs(filters, { search, sort, dir, page, perPage: 25 });
+
+  // Every matching order, not just this page.
+  const [exportCsv] = useAction(async () => {
+    try {
+      saveFile(datedFileName('orders'), await financeApi.ordersCsv(qs(filters, { search, sort, dir })));
+    } catch (err) {
+      toast(err.message, 'err');
+    }
+  });
 
   useEffect(() => {
     let alive = true;
@@ -375,9 +377,9 @@ function OrdersTab({ filters }) {
         <div className="grow" style={{ minWidth: 220, maxWidth: 400 }}>
           <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Order id, name, phone…" />
         </div>
-        <a className="btn sm" href={`${FINANCE_BASE}/orders?${qs(filters, { search, sort, dir, format: 'csv' })}`}>
+        <button className="btn sm" onClick={exportCsv}>
           <IconDownload /> CSV / Excel
-        </a>
+        </button>
       </div>
 
       <div className="card">
@@ -402,7 +404,7 @@ function OrdersTab({ filters }) {
                 <tbody>
                   {data.rows.map((r) => (
                     <tr key={r.id} className="row-link" onClick={() => navigate(`/orders/${r.id}`)}>
-                      <td className="strong">#{r.id}</td>
+                      <td className="strong"><OrderLink id={r.id} /></td>
                       <td className="small muted">{fmtDate(r.order_time)}</td>
                       <td>
                         <div>{r.full_name}</div>
@@ -456,14 +458,14 @@ function ProductsTab({ filters }) {
               <div className="card">
                 <div className="card-head"><h3>Top 10 by net revenue</h3></div>
                 <div className="card-body">
-                  <BarList data={perf.slice(0, 10).map((p) => ({ name: p.name, value: Number(p.net) }))} formatV={money} />
+                  <BarList data={perf.slice(0, 10).map((p) => ({ id: p.id, name: p.name, value: Number(p.net) }))} formatV={money} />
                 </div>
               </div>
               <div className="card">
                 <div className="card-head"><h3>Best sellers (orders)</h3></div>
                 <div className="card-body">
                   <BarList data={[...perf].sort((a, b) => b.orders - a.orders).slice(0, 10)
-                    .map((p) => ({ name: p.name, value: Number(p.orders) }))} formatV={(v) => v.toLocaleString()} />
+                    .map((p) => ({ id: p.id, name: p.name, value: Number(p.orders) }))} formatV={(v) => v.toLocaleString()} />
                 </div>
               </div>
             </div>
@@ -482,7 +484,7 @@ function ProductsTab({ filters }) {
                   </thead>
                   <tbody>
                     {perf.map((p) => (
-                      <tr key={p.name}>
+                      <tr key={p.id ?? p.name}>
                         <td className="strong">{p.name}</td>
                         <td className="num">{p.orders}</td>
                         <td className="num">{p.cards}</td>
@@ -504,14 +506,14 @@ function ProductsTab({ filters }) {
                   <div className="card-head"><h3>Highest profit</h3></div>
                   <div className="card-body">
                     <BarList data={[...withProfit].sort((a, b) => b.profit - a.profit).slice(0, 5)
-                      .map((p) => ({ name: p.name, value: Number(p.profit) }))} formatV={money} />
+                      .map((p) => ({ id: p.id, name: p.name, value: Number(p.profit) }))} formatV={money} />
                   </div>
                 </div>
                 <div className="card">
                   <div className="card-head"><h3>Lowest profit</h3></div>
                   <div className="card-body">
                     <BarList data={[...withProfit].sort((a, b) => a.profit - b.profit).slice(0, 5)
-                      .map((p) => ({ name: p.name, value: Number(p.profit) }))} formatV={money} />
+                      .map((p) => ({ id: p.id, name: p.name, value: Number(p.profit) }))} formatV={money} />
                   </div>
                 </div>
               </div>
@@ -522,7 +524,7 @@ function ProductsTab({ filters }) {
                 <div className="card-head"><h3>Never sold ({d.never_sold.length})</h3></div>
                 <div className="card-body row wrap">
                   {d.never_sold.map((p) => (
-                    <span key={p.name} className="badge" style={{ '--badge-c': 'var(--ink-3)' }}>
+                    <span key={p.id ?? p.name} className="badge" style={{ '--badge-c': 'var(--ink-3)' }}>
                       {p.name}{!p.is_active && ' (inactive)'}
                     </span>
                   ))}
@@ -823,7 +825,7 @@ function ProfitTab({ filters }) {
   const [editing, setEditing] = useState(null); // {id, name, unit_cost}
   const [costVal, setCostVal] = useState('');
 
-  const saveCost = async () => {
+  const [saveCost, savingCost] = useAction(async () => {
     try {
       await financeApi.setCost(editing.id, Number(costVal));
       toast(`Cost saved for ${editing.name}`);
@@ -833,7 +835,7 @@ function ProfitTab({ filters }) {
     } catch (e) {
       toast(e.message, 'err');
     }
-  };
+  });
 
   return (
     <SectionShell hook={hook}>
@@ -925,7 +927,9 @@ function ProfitTab({ filters }) {
                 footer={(
                   <>
                     <button className="btn" onClick={() => setEditing(null)}>Cancel</button>
-                    <button className="btn primary" onClick={saveCost} disabled={!costVal || Number(costVal) < 0}>Save</button>
+                    <button className="btn primary" onClick={saveCost} disabled={savingCost || !costVal || Number(costVal) < 0}>
+                      {savingCost ? 'Saving…' : 'Save'}
+                    </button>
                   </>
                 )}>
                 <label className="field">
@@ -952,7 +956,7 @@ function CashflowTab({ filters }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ type: 'expense', value: '', description: '', orderId: '' });
 
-  const submit = async () => {
+  const [submit, recording] = useAction(async () => {
     try {
       await financeApi.addEntry({
         type: form.type,
@@ -968,7 +972,7 @@ function CashflowTab({ filters }) {
     } catch (e) {
       toast(e.message, 'err');
     }
-  };
+  });
 
   return (
     <SectionShell hook={hook}>
@@ -1037,7 +1041,9 @@ function CashflowTab({ filters }) {
                   <>
                     <button className="btn" onClick={() => setAdding(false)}>Cancel</button>
                     <button className="btn primary" onClick={submit}
-                      disabled={!form.value || Number(form.value) <= 0 || !form.description.trim()}>Record</button>
+                      disabled={recording || !form.value || Number(form.value) <= 0 || !form.description.trim()}>
+                      {recording ? 'Saving…' : 'Record'}
+                    </button>
                   </>
                 )}>
                 <div className="stack" style={{ gap: 14 }}>

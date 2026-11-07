@@ -175,7 +175,7 @@ function LookupCard() {
       <form className="card-body stack" style={{ gap: 12 }} onSubmit={submit}>
         <div className="row">
           <input className="input" value={username} onChange={(e) => setUsername(e.target.value)}
-            placeholder="Username (e.g. z123)" required />
+            placeholder="Username (e.g. z123)" aria-label="Customer username" required />
           <button className="btn" disabled={busy}>{busy ? '…' : 'Find'}</button>
         </div>
         {result && !result.found && <div className="small" style={{ color: 'var(--danger)' }}>No account with that username.</div>}

@@ -3,6 +3,7 @@ import { IconPlus, IconX } from '../components/Icons.jsx';
 import { Can, Empty, Modal, Spinner } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import { useAction } from '../hooks/useAction.js';
 import { productsApi } from '../lib/api.js';
 import { money } from '../lib/format.js';
 
@@ -80,7 +81,11 @@ function ProductCard({ product: p, onEdit }) {
 
   return (
     <div className="card design-card" onClick={onEdit} role="button" tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onEdit()}>
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault(); // Space would also scroll the page
+        onEdit();
+      }}>
       <div className="card-body" style={{ padding: 14 }}>
         <div className="row" style={{ alignItems: 'flex-start' }}>
           <ProductImg url={p.product_images[0]?.image_url} />
@@ -114,6 +119,11 @@ const BLANK = { name: '', slug: '', description: '', is_active: true, is_new: tr
 
 const slugify = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
+const formFrom = (p) => ({
+  name: p.name, slug: p.slug, description: p.description || '',
+  is_active: p.is_active, is_new: p.is_new, in_stock: p.in_stock, is_limited: p.is_limited, quantity: p.quantity,
+});
+
 function ProductModal({ productId, onClose, onChanged }) {
   const toast = useToast();
   const isNew = !productId;
@@ -122,15 +132,23 @@ function ProductModal({ productId, onClose, onChanged }) {
   const [slugTouched, setSlugTouched] = useState(!isNew);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback((id) => productsApi.get(id).then((p) => {
+  // Re-reads the design without touching the form, so unsaved edits to the
+  // name or description survive adding a color, image or price tier.
+  const fetchProduct = useCallback((id) => productsApi.get(id).then((p) => {
     setProduct(p);
-    setForm({
-      name: p.name, slug: p.slug, description: p.description || '',
-      is_active: p.is_active, is_new: p.is_new, in_stock: p.in_stock, is_limited: p.is_limited, quantity: p.quantity,
-    });
+    return p;
   }), []);
 
+  // Opening the modal, and after a save: the form shows what's saved.
+  const load = useCallback((id) => fetchProduct(id).then((p) => setForm(formFrom(p))), [fetchProduct]);
+
   useEffect(() => { if (productId) load(productId); }, [productId, load]);
+
+  // Colors, images and price tiers show on the grid behind the modal too.
+  const onPartsChanged = () => {
+    fetchProduct(product.id);
+    onChanged();
+  };
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const setFlag = (k) => (e) => setForm({ ...form, [k]: e.target.checked });
@@ -148,12 +166,15 @@ function ProductModal({ productId, onClose, onChanged }) {
           name: form.name, description: form.description, isNew: form.is_new,
           inStock: form.in_stock, isLimited: form.is_limited, quantity: Number(form.quantity) || 0,
         });
+        // Retiring or reactivating a design has its own endpoint; the edit
+        // body above doesn't carry it.
+        if (form.is_active !== product.is_active) await productsApi.toggle(product.id, form.is_active);
         toast('Design updated');
         await load(product.id);
       } else {
         const created = await productsApi.save(null, {
           typeCode: 'CARD', slug: form.slug, name: form.name, description: form.description,
-          isNew: form.is_new, isLimited: form.is_limited, quantity: Number(form.quantity) || 0,
+          isNew: form.is_new, inStock: form.in_stock, isLimited: form.is_limited, quantity: Number(form.quantity) || 0,
         });
         toast('Design created — now add colors and a price tier');
         await load(created.id);
@@ -171,9 +192,10 @@ function ProductModal({ productId, onClose, onChanged }) {
       footer={(
         <>
           <button className="btn" onClick={onClose}>Close</button>
-          <Can perm="catalog.products.update">
+          <Can perm={product ? 'catalog.products.update' : 'catalog.products.add'}>
+            {/* The shop shows every design's description next to it, so it's required. */}
             <button className="btn primary" onClick={save}
-              disabled={busy || !form.name.trim() || (isNew && !form.slug.trim())}>
+              disabled={busy || !form.name.trim() || !form.description.trim() || (!product && !form.slug.trim())}>
               {busy ? 'Saving…' : product ? 'Save changes' : 'Create design'}
             </button>
           </Can>
@@ -187,7 +209,7 @@ function ProductModal({ productId, onClose, onChanged }) {
           </label>
           <label className="field">
             <span>Slug (URL)</span>
-            <input className="input mono" value={form.slug} disabled={!isNew}
+            <input className="input mono" value={form.slug} disabled={!!product}
               onChange={(e) => { setSlugTouched(true); set('slug')(e); }} placeholder="minimal-couples-card" />
           </label>
         </div>
@@ -200,7 +222,7 @@ function ProductModal({ productId, onClose, onChanged }) {
         <div className="row wrap" style={{ gap: 16 }}>
           {[['is_active', 'Active'], ['in_stock', 'In stock'], ['is_new', 'New badge'], ['is_limited', 'Limited']].map(([k, l]) => (
             <label key={k} className="row" style={{ gap: 6, cursor: 'pointer' }}>
-              <input type="checkbox" checked={form[k]} onChange={setFlag(k)} disabled={k === 'is_active' && isNew} /> {l}
+              <input type="checkbox" checked={form[k]} onChange={setFlag(k)} disabled={k === 'is_active' && !product} /> {l}
             </label>
           ))}
           <label className="field" style={{ width: 110 }}>
@@ -211,9 +233,9 @@ function ProductModal({ productId, onClose, onChanged }) {
 
         {product ? (
           <>
-            <CoverImageEditor product={product} onChanged={() => load(product.id)} />
-            <ColorsEditor product={product} onChanged={() => load(product.id)} />
-            <PricesEditor product={product} onChanged={() => load(product.id)} />
+            <CoverImageEditor product={product} onChanged={onPartsChanged} />
+            <ColorsEditor product={product} onChanged={onPartsChanged} />
+            <PricesEditor product={product} onChanged={onPartsChanged} />
           </>
         ) : (
           <div className="small muted">Create the design first, then add its cover image, colors and price tiers here.</div>
@@ -249,14 +271,14 @@ function CoverImageEditor({ product, onChanged }) {
     }
   };
 
-  const clear = async () => {
+  const [clear] = useAction(async () => {
     try {
       await productsApi.deleteColorImage(cover.id);
       onChanged();
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
   return (
     <div>
@@ -282,7 +304,7 @@ function ColorsEditor({ product, onChanged }) {
   const [name, setName] = useState('');
   const [hex, setHex] = useState('#050a30');
 
-  const add = async () => {
+  const [add] = useAction(async () => {
     try {
       await productsApi.addColor(product.id, { name: name.trim(), hex });
       setName('');
@@ -291,9 +313,9 @@ function ColorsEditor({ product, onChanged }) {
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
-  const remove = async (c) => {
+  const [remove] = useAction(async (c) => {
     try {
       await productsApi.deleteColor(c.id);
       toast('Color removed');
@@ -301,7 +323,7 @@ function ColorsEditor({ product, onChanged }) {
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
   return (
     <div>
@@ -319,7 +341,7 @@ function ColorsEditor({ product, onChanged }) {
             )}
             <div className="grow" />
             <Can perm="catalog.products.update">
-              <button type="button" className="btn sm ghost icon" title="Remove color" onClick={() => remove(c)}>
+              <button type="button" className="btn sm ghost icon" title="Remove color" aria-label={`Remove color ${c.name}`} onClick={() => remove(c)}>
                 <IconX size={13} />
               </button>
             </Can>
@@ -367,14 +389,14 @@ function ColorImage({ productId, color, images, side, onChanged }) {
     }
   };
 
-  const clear = async () => {
+  const [clear] = useAction(async () => {
     try {
       await productsApi.deleteColorImage(image.id);
       onChanged();
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
   return (
     <div className="color-img">
@@ -385,7 +407,7 @@ function ColorImage({ productId, color, images, side, onChanged }) {
         )}
       </button>
       {image && (
-        <button type="button" className="color-img-x" title="Remove image" onClick={clear}><IconX size={11} /></button>
+        <button type="button" className="color-img-x" title="Remove image" aria-label={`Remove ${side === 'back' ? 'back' : 'front'} image`} onClick={clear}><IconX size={11} /></button>
       )}
       <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={upload} />
     </div>
@@ -396,7 +418,7 @@ function PricesEditor({ product, onChanged }) {
   const toast = useToast();
   const [row, setRow] = useState({ cardsCount: 2, price: '', discountPercentage: '' });
 
-  const save = async () => {
+  const [save] = useAction(async () => {
     try {
       await productsApi.savePriceTier(product.id, {
         cardsCount: Number(row.cardsCount),
@@ -409,9 +431,9 @@ function PricesEditor({ product, onChanged }) {
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
-  const remove = async (tier) => {
+  const [remove] = useAction(async (tier) => {
     try {
       await productsApi.deletePriceTier(tier.id);
       toast('Price tier removed');
@@ -419,7 +441,7 @@ function PricesEditor({ product, onChanged }) {
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
   return (
     <div>
@@ -436,7 +458,7 @@ function PricesEditor({ product, onChanged }) {
                   <td className="num">{t.discount_percentage ?? '—'}</td>
                   <td style={{ textAlign: 'right' }}>
                     <Can perm="catalog.prices.update">
-                      <button type="button" className="btn sm danger" onClick={() => remove(t)}><IconX size={12} /></button>
+                      <button type="button" className="btn sm danger" aria-label={`Remove the ${t.cards_count}-card price tier`} onClick={() => remove(t)}><IconX size={12} /></button>
                     </Can>
                   </td>
                 </tr>

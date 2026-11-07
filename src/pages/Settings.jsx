@@ -3,6 +3,7 @@ import { IconUser } from '../components/Icons.jsx';
 import { Spinner } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import { useAction } from '../hooks/useAction.js';
 import { settingsApi } from '../lib/api.js';
 import { fmtDate } from '../lib/format.js';
 
@@ -10,9 +11,12 @@ import { fmtDate } from '../lib/format.js';
 export default function Settings() {
   const [me, setMe] = useState(null);
   const [error, setError] = useState('');
+  const [sessions, setSessions] = useState(null);
 
   const load = () => settingsApi.me().then((d) => setMe(d.user)).catch((e) => setError(e.message));
-  useEffect(() => { load(); }, []);
+  const loadSessions = () => settingsApi.sessions().then((d) => setSessions(d.sessions)).catch(() => setSessions([]));
+  // Both at once: the devices list doesn't need to wait for the profile.
+  useEffect(() => { load(); loadSessions(); }, []);
 
   if (error) return <div className="empty">{error}</div>;
   if (!me) return <div style={{ padding: 60 }}><Spinner /></div>;
@@ -33,31 +37,28 @@ export default function Settings() {
         </div>
       </div>
 
-      <ProfileCard me={me} onChanged={load} />
+      {/* Keyed by the saved name: after saving, the field starts from it again. */}
+      <ProfileCard key={me.display_name} me={me} onChanged={load} />
       <PasswordCard />
       <EmailCard me={me} onChanged={load} />
-      <SessionsCard />
+      <SessionsCard sessions={sessions} onChanged={loadSessions} />
     </div>
   );
 }
 
-function SessionsCard() {
+function SessionsCard({ sessions, onChanged }) {
   const toast = useToast();
-  const [sessions, setSessions] = useState(null);
 
-  const load = () => settingsApi.sessions().then((d) => setSessions(d.sessions)).catch(() => setSessions([]));
-  useEffect(() => { load(); }, []);
-
-  const revoke = async (s) => {
+  const [revoke] = useAction(async (s) => {
     try {
       await settingsApi.revokeSession(s.id);
       toast(s.current ? 'Signed out this device' : 'Device signed out');
       if (s.current) { window.location.reload(); return; }
-      load();
+      await onChanged();
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
   return (
     <div className="card">
@@ -98,15 +99,15 @@ function ProfileCard({ me, onChanged }) {
   const [name, setName] = useState(me.display_name || '');
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => setName(me.display_name || ''), [me.display_name]);
-
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
     try {
       const res = await settingsApi.updateProfile(name.trim());
       toast('Profile updated');
-      refreshUser?.(res.user);
+      // The sidebar reads the signed-in user's `displayName`; this endpoint
+      // answers with `display_name`.
+      refreshUser({ displayName: res.user.display_name });
       onChanged();
     } catch (err) {
       toast(err.message, 'err');

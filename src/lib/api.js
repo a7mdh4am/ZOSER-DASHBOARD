@@ -125,6 +125,23 @@ async function apiUpload(path, formData) {
   return data?.data ?? data;
 }
 
+/** GET a file (e.g. a CSV export) as a Blob. Errors still arrive as the JSON envelope. */
+async function apiFile(path) {
+  let res;
+  try {
+    res = await send(`${BASE}${path}`, { headers: { Accept: 'text/csv' }, credentials: 'same-origin' });
+  } catch {
+    throw new ApiError('Network error — check your connection', 0, null);
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    if (res.status === 401) window.dispatchEvent(new Event('zoser:unauthorized'));
+    throw new ApiError(data?.error?.message || `Download failed (${res.status})`, res.status, data?.error ?? null);
+  }
+  return res.blob();
+}
+
 /* ------------------------------------------------------------------ */
 /* auth                                                                */
 /* ------------------------------------------------------------------ */
@@ -193,6 +210,8 @@ export const financeApi = {
   /** Generic section fetch (products/customers/payments/discounts/shipping/refunds/profit/cashflow). */
   section: (section, query) => apiGet(`/finance/${section}?${query}`),
   orders: (query) => apiGet(`/finance/orders?${query}`),
+  /** Every order matching the filters (not just one page), as a CSV Blob. */
+  ordersCsv: (query) => apiFile(`/finance/orders?${query}&format=csv`),
   setCost: (productId, unitCost) => apiPost('/finance/costs', { productId, unitCost }),
   addEntry: (body) => apiPost('/finance/entries', body),
 };
@@ -231,14 +250,9 @@ export const couponsApi = {
 /* ------------------------------------------------------------------ */
 
 export const customersApi = {
-  list: (params) => apiGet(`/customers?${new URLSearchParams(params)}`),
-  get: (id) => apiGet(`/customers/${id}`),
   create: (form) => apiPost('/customers', form),
-  block: (id, isBlocked) => apiPost(`/customers/${id}/block`, { isBlocked }),
   resetPassword: (id, newPassword) => apiPost(`/customers/${id}/password-reset`, { newPassword }),
-  delete: (id, reason) => apiPost(`/customers/${id}/delete`, { reason }),
   lookup: (username) => apiGet(`/customers/lookup?username=${encodeURIComponent(username)}`),
-  activity: (id, page, perPage = 30) => apiGet(`/customers/${id}/activity?page=${page}&perPage=${perPage}`),
 };
 
 /* ------------------------------------------------------------------ */

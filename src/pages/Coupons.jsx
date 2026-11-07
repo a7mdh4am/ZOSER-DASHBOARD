@@ -3,6 +3,7 @@ import { IconPlus, IconTag } from '../components/Icons.jsx';
 import { Empty, Modal, Spinner } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import { useAction } from '../hooks/useAction.js';
 import { couponsApi } from '../lib/api.js';
 import { fmtDate } from '../lib/format.js';
 
@@ -26,15 +27,16 @@ export default function Coupons() {
   );
   useEffect(() => { load(); }, [load]);
 
-  const toggle = async (c) => {
-    try { await couponsApi.toggle(c.id, !c.is_active); toast(c.is_active ? `${c.coupon} disabled` : `${c.coupon} enabled`); load(); }
+  // One at a time: a double-click would otherwise toggle a coupon twice.
+  const [toggle] = useAction(async (c) => {
+    try { await couponsApi.toggle(c.id, !c.is_active); toast(c.is_active ? `${c.coupon} disabled` : `${c.coupon} enabled`); await load(); }
     catch (err) { toast(err.message, 'err'); }
-  };
-  const remove = async (c) => {
+  });
+  const [remove] = useAction(async (c) => {
     if (!window.confirm(`Delete coupon ${c.coupon}?`)) return;
-    try { await couponsApi.remove(c.id); toast(`${c.coupon} deleted`); load(); }
+    try { await couponsApi.remove(c.id); toast(`${c.coupon} deleted`); await load(); }
     catch (err) { toast(err.message, 'err'); }
-  };
+  });
 
   if (error) return <Empty title="Couldn't load coupons" hint={error} />;
   if (!coupons) return <div style={{ padding: 60 }}><Spinner /></div>;

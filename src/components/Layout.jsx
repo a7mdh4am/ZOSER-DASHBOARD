@@ -5,8 +5,20 @@ import {
   IconBox, IconBrush, IconDashboard, IconGear, IconKey, IconLogout, IconMenu, IconMoney, IconMoon, IconOrders, IconPalette, IconShield, IconSun, IconTag, IconUser,
 } from './Icons.jsx';
 
+const THEME_KEY = 'zoser-theme';
+
+// Storage can be blocked (private mode, site settings); the theme then just
+// follows the OS and a manual choice lasts for this visit.
+function savedTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY) || 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
 function useTheme() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('zoser-theme') || 'auto');
+  const [theme, setTheme] = useState(savedTheme);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -22,7 +34,9 @@ function useTheme() {
   const toggle = () => {
     const dark = document.documentElement.dataset.theme === 'dark';
     const next = dark ? 'light' : 'dark';
-    localStorage.setItem('zoser-theme', next);
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch { /* see savedTheme() */ }
     setTheme(next);
   };
 
@@ -48,7 +62,7 @@ const NAV = [
   ['/', 'Dashboard', IconDashboard, 'dashboard.view', true],
   ['/orders', 'Orders', IconOrders, 'orders.view', false],
   ['/designer', 'Design Studio', IconPalette, 'designer.view', false],
-  ['/customers', 'Customers', IconUser, 'customers', false],
+  ['/customers', 'Customers', IconUser, 'customers.view', false],
   ['/themes', 'Themes', IconBrush, 'themes.view', false],
   ['/products', 'Products', IconBox, 'products.view', false],
   ['/coupons', 'Coupons', IconTag, 'coupons.view', false],
@@ -60,15 +74,18 @@ const NAV = [
 export default function Layout() {
   const { user, logout, can } = useAuth();
   const { toggle } = useTheme();
-  const [open, setOpen] = useState(false);
   const location = useLocation();
-
-  useEffect(() => setOpen(false), [location.pathname]);
+  // The mobile menu remembers the page it was opened on, so going to another
+  // page closes it by itself.
+  const [menuOpenedOn, setMenuOpenedOn] = useState(null);
+  const open = menuOpenedOn === location.pathname;
+  const setOpen = (isOpen) => setMenuOpenedOn(isOpen ? location.pathname : null);
 
   const title = TITLES.find(([p]) => location.pathname.startsWith(p) && p !== '/')?.[1]
     ?? (location.pathname === '/' ? 'Dashboard' : 'Zoser');
 
-  const initials = (user?.display_name || user?.username || '?').slice(0, 2);
+  const name = user?.displayName || user?.username || '?';
+  const initials = name.slice(0, 2);
 
   return (
     <div className="shell">
@@ -89,8 +106,8 @@ export default function Layout() {
         <div className="user-chip">
           <div className="avatar">{initials}</div>
           <div className="who grow">
-            <div className="name">{user?.display_name || user?.username}</div>
-            <div className="role">{user?.role}</div>
+            <div className="name" title={name}>{name}</div>
+            <div className="role" title={user?.roleName || user?.role}>{user?.roleName || user?.role}</div>
           </div>
           <NavLink to="/settings" className="btn ghost icon" title="Account settings" aria-label="Account settings">
             <IconGear />

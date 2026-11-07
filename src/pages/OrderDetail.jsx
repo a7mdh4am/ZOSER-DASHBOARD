@@ -6,6 +6,7 @@ import {
 import { Can, CopyButton, Empty, Modal, Spinner, StatusBadge } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import { useAction } from '../hooks/useAction.js';
 import { geoApi, ordersApi, shipmentsApi, themesApi } from '../lib/api.js';
 import { colorHex, fmtDate, fmtProductionDate, money2, statusOf, STATUS_ORDER, waLink } from '../lib/format.js';
 
@@ -28,6 +29,8 @@ export default function OrderDetail() {
     [id],
   );
 
+  // Another order: drop the previous one's data before fetching.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset + fetch when the order id changes
   useEffect(() => { setData(null); setError(''); load(); }, [load]);
 
   if (error) return <Empty title="Couldn't load this order" hint={error} />;
@@ -58,7 +61,8 @@ export default function OrderDetail() {
 
         {/* ============ right column ============ */}
         <div className="stack">
-          <StatusCard order={order} onChanged={load} />
+          {/* Keyed by status: after a change it starts over on the saved status. */}
+          <StatusCard key={order.status} order={order} onChanged={load} />
           <ProfileCard orderId={order.id} profile={profile} onChanged={load} />
 
           <div className="card">
@@ -128,6 +132,9 @@ function PaymentCard({ order, financial, deposits, onChanged }) {
               <span className="mono">−{money2(financial.discount)}</span>
             </div>
           )}
+          {financial.shipping != null && (
+            <div className="pr"><span className="muted">Shipping</span><span className="mono">{money2(financial.shipping)}</span></div>
+          )}
           <div className="pr"><span className="strong">Order total</span><span className="mono strong">{money2(financial.net_total)}</span></div>
 
           {deposits.map((d) => (
@@ -186,7 +193,6 @@ function ItemsCard({ items, extras }) {
                   <div className="item-thumb" style={{ display: 'grid', placeItems: 'center', color: 'var(--ink-3)' }}>No image</div>
                 )}
                 <div className="in">
-                  {/* {it.color && <span className="color-dot" style={{ background: colorHex(it.color) || 'var(--surface-2)' }} title={it.color} />} */}
                   <span>{it.name}<CopyButton text={it.name} label={'Name'} /></span>
                 </div>
                 <div className="row" style={{ gap: 6, marginTop: 2 }}>
@@ -394,8 +400,6 @@ function StatusCard({ order, onChanged }) {
   const [value, setValue] = useState(String(order.status));
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => setValue(String(order.status)), [order.status]);
-
   // Node's flat permission model has no per-status target restriction —
   // orders.status.update allows setting any status.
   const cur = String(order.status);
@@ -438,14 +442,21 @@ function StatusCard({ order, onChanged }) {
 function ProfileCard({ orderId, profile, onChanged }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [link, setLink] = useState(profile.link);
-  const [themes, setThemes] = useState(profile.themes || []);
+  // Shown straight after "Create profile", before the order has reloaded.
+  const [createdLink, setCreatedLink] = useState(null);
+  const link = profile.link || createdLink;
   const [tempPassword, setTempPassword] = useState(null);
 
-  useEffect(() => setLink(profile.link), [profile.link]);
-  useEffect(() => setThemes(profile.themes || []), [profile.themes]);
+  // Toggling a chip updates these right away; a reload of the order replaces
+  // them (adjusting state during render rather than in an effect).
+  const [themes, setThemes] = useState(profile.themes || []);
+  const [themesFrom, setThemesFrom] = useState(profile.themes);
+  if (profile.themes !== themesFrom) {
+    setThemesFrom(profile.themes);
+    setThemes(profile.themes || []);
+  }
 
-  const toggleTheme = async (t) => {
+  const [toggleTheme] = useAction(async (t) => {
     try {
       const res = await themesApi.assign({
         username: profile.username,
@@ -457,13 +468,13 @@ function ProfileCard({ orderId, profile, onChanged }) {
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
   const create = async () => {
     setBusy(true);
     try {
       const res = await ordersApi.createProfile(orderId);
-      setLink(res.link);
+      setCreatedLink(res.link);
       setTempPassword(res.temporaryPassword);
       toast('Profile created');
       onChanged();
@@ -554,7 +565,7 @@ function CustomerCard({ order, onChanged }) {
             <div className="v copy-line">
               {order.phone}
               <CopyButton text={order.phone} label="phone" />
-              <a className="copy-btn" style={{ color: 'var(--st-shipped)' }} href={waLink(order.phone)} target="_blank" rel="noreferrer" title="WhatsApp">
+              <a className="copy-btn" style={{ color: 'var(--st-shipped)' }} href={waLink(order.phone)} target="_blank" rel="noreferrer" title="WhatsApp" aria-label="Message on WhatsApp">
                 <IconWhatsapp />
               </a>
             </div>
@@ -742,7 +753,7 @@ function EditDesignModal({ order, items, products, cardCount, onClose, onDone })
                 <option value={form.product_id}>{order.product_name || 'Current product'}</option>
               )}
               {products.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} ({p.category})</option>
+                <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           </label>

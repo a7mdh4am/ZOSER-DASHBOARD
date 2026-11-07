@@ -3,6 +3,7 @@ import { IconPlus, IconShield } from '../components/Icons.jsx';
 import { Empty, Modal, Pager, Spinner } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import { useAction } from '../hooks/useAction.js';
 import { activityApi, rolesApi, teamApi } from '../lib/api.js';
 import { fmtDate } from '../lib/format.js';
 
@@ -19,9 +20,9 @@ export default function Team() {
 
   return (
     <div className="stack">
-      <div className="seg" style={{ alignSelf: 'flex-start' }} role="tablist" aria-label="Team sections">
-        <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>Users</button>
-        <button className={tab === 'activity' ? 'active' : ''} onClick={() => setTab('activity')}>Activity feed</button>
+      <div className="seg" style={{ alignSelf: 'flex-start' }} role="group" aria-label="Team sections">
+        <button className={tab === 'users' ? 'active' : ''} aria-pressed={tab === 'users'} onClick={() => setTab('users')}>Users</button>
+        <button className={tab === 'activity' ? 'active' : ''} aria-pressed={tab === 'activity'} onClick={() => setTab('activity')}>Activity feed</button>
       </div>
       {tab === 'users' ? <UsersTab /> : <ActivityFeed />}
     </div>
@@ -46,15 +47,15 @@ function UsersTab() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { rolesApi.list().then((d) => setRoles(d.roles)).catch(() => setRoles([])); }, []);
 
-  const toggle = async (u) => {
+  const [toggle] = useAction(async (u) => {
     try {
       await teamApi.toggle(u.id, !u.isBlocked);
       toast(u.isBlocked ? `${u.username} activated` : `${u.username} deactivated`);
-      load();
+      await load();
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
   if (error) return <Empty title="Couldn't load the team" hint={error} />;
   if (!users) return <div style={{ padding: 60 }}><Spinner /></div>;

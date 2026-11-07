@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { IconExternal, IconPlus, IconX } from '../components/Icons.jsx';
 import { Can, Empty, Modal, Spinner } from '../components/ui.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import { useAction } from '../hooks/useAction.js';
 import { customersApi, themesApi } from '../lib/api.js';
 import { money } from '../lib/format.js';
 
@@ -26,7 +27,7 @@ export default function Themes() {
   return (
     <div className="stack">
       <CustomThemes themes={data.custom} onChanged={load} />
-      <Can perm="profiles.themes.add"><AssignCard themes={data.custom} /></Can>
+      <Can perm="profiles.themes.add"><AssignCard /></Can>
       <SiteThemes themes={data.site} onChanged={load} />
     </div>
   );
@@ -63,15 +64,15 @@ function CustomThemes({ themes, onChanged }) {
     }
   };
 
-  const toggle = async (t) => {
+  const [toggle] = useAction(async (t) => {
     try {
       await themesApi.toggleCustom(t.id, !t.is_active);
       toast(`${t.theme} ${Number(t.is_active) ? 'disabled' : 'enabled'}`);
-      onChanged();
+      await onChanged();
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
   return (
     <div className="card">
@@ -197,7 +198,7 @@ function AssignCard() {
     }
   };
 
-  const toggleTheme = async (t) => {
+  const [toggleTheme] = useAction(async (t) => {
     try {
       const res = await themesApi.assign({
         username: username.trim(),
@@ -205,11 +206,11 @@ function AssignCard() {
         action: t.status === 'owned' ? 'remove' : 'assign',
       });
       toast(t.status === 'owned' ? `${t.theme} removed` : `${t.theme} assigned`);
-      setLookup({ ...lookup, themes: res.themes });
+      setLookup((current) => ({ ...current, themes: res.themes }));
     } catch (err) {
       toast(err.message, 'err');
     }
-  };
+  });
 
   return (
     <div className="card">
@@ -217,7 +218,7 @@ function AssignCard() {
       <div className="card-body stack" style={{ gap: 12 }}>
         <form className="row" onSubmit={find} style={{ maxWidth: 420 }}>
           <input className="input" value={username} onChange={(e) => setUsername(e.target.value)}
-            placeholder="Username (e.g. z123)" required />
+            placeholder="Username (e.g. z123)" aria-label="Customer username" required />
           <button className="btn" disabled={busy}>{busy ? '…' : 'Find'}</button>
         </form>
 
@@ -251,14 +252,19 @@ function SiteThemes({ themes, onChanged }) {
   const [adding, setAdding] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  const act = async (fn, okMsg) => {
+  const [act] = useAction(async (fn, okMsg) => {
     try {
       await fn();
       toast(okMsg);
-      onChanged();
+      await onChanged();
     } catch (err) {
       toast(err.message, 'err');
     }
+  });
+
+  const remove = (t) => {
+    if (!window.confirm(`Delete the "${t.display_name}" site theme?`)) return;
+    act(() => themesApi.deleteSite(t.id), `${t.display_name} deleted`);
   };
 
   const create = async () => {
@@ -313,7 +319,7 @@ function SiteThemes({ themes, onChanged }) {
                         {Number(t.is_active) ? 'Disable' : 'Enable'}
                       </button>
                       {t.name !== 'default' && (
-                        <button className="btn sm danger" onClick={() => act(() => themesApi.deleteSite(t.id), `${t.display_name} deleted`)}>
+                        <button className="btn sm danger" aria-label={`Delete ${t.display_name}`} onClick={() => remove(t)}>
                           <IconX size={13} />
                         </button>
                       )}
