@@ -824,6 +824,11 @@ label.check input {
   max-width: 760px;
 }
 
+/* The dialog itself takes focus when it opens; its controls show focus, it doesn't. */
+.modal:focus {
+  outline: none;
+}
+
 /* ---------- toasts ---------- */
 .toasts {
   position: fixed;

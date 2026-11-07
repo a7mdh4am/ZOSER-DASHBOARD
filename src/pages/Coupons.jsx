@@ -7,8 +7,8 @@ import {
   PageLoader,
   Segmented,
 } from "../components/ui.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
-import { useToast } from "../context/ToastContext.jsx";
+import { useAuth } from "../context/auth.js";
+import { useToast } from "../context/toast.js";
 import { useAction } from "../hooks/useAction.js";
 import { useApiData } from "../hooks/useApiData.js";
 import { couponsApi } from "../lib/api.js";

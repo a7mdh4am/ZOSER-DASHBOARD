@@ -24,15 +24,6 @@ export default defineConfig([
         "warn",
         { additionalHooks: "(useApiData)" },
       ],
-      // The two context files export their provider and its hook together.
-      "react-refresh/only-export-components": [
-        "error",
-        {
-          allowConstantExport: true, // the vite preset's options, kept
-          allowCompoundComponents: true,
-          allowExportNames: ["useAuth", "useToast"],
-        },
-      ],
     },
   },
 ]);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "../context/auth.js";
 import { statusOf } from "../lib/format.js";
 import {
   IconCheck,
@@ -232,16 +232,64 @@ export function SearchInput({
   );
 }
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Dialog over the page. While it's open, keyboard focus stays inside it (Tab
+ * wraps around), Escape closes it, and the page behind doesn't scroll. When
+ * it closes, focus goes back to whatever opened it.
+ */
 export function Modal({ title, onClose, children, footer, wide }) {
+  const dialogRef = useRef(null);
+  // Read while rendering: by the time effects run, a field inside may already
+  // have taken focus with autoFocus.
+  const [opener] = useState(() => document.activeElement);
+  // The latest onClose, so the setup below runs once rather than on every
+  // render of the page behind.
+  const onCloseRef = useRef(onClose);
   useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onClose();
+    onCloseRef.current = onClose;
+  });
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    // Move focus in, unless a field inside already took it (autoFocus).
+    if (!dialog.contains(document.activeElement)) dialog.focus();
+
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const focusable = [...dialog.querySelectorAll(FOCUSABLE)].filter(
+        (el) => el.getClientRects().length > 0,
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      const inside = dialog.contains(document.activeElement);
+      if (e.shiftKey && (document.activeElement === first || !inside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !inside)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
     document.addEventListener("keydown", onKey);
+    const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = overflow;
+      // Only once the dialog is really gone (React's StrictMode re-runs this
+      // effect in development while the dialog stays on the page).
+      if (!dialog.isConnected && opener?.isConnected) opener.focus();
     };
-  }, [onClose]);
+  }, [opener]);
 
   return (
     <div
@@ -249,10 +297,12 @@ export function Modal({ title, onClose, children, footer, wide }) {
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
+        ref={dialogRef}
         className={`modal${wide ? " wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
       >
         <div className="m-head">
           <h3>{title}</h3>

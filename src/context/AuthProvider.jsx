@@ -1,15 +1,7 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { authApi, setCsrf } from "../lib/api.js";
 import { hasPermission } from "../lib/permissions.js";
-
-const AuthContext = createContext(null);
+import { AuthContext } from "./auth.js";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -86,5 +78,3 @@ export function AuthProvider({ children }) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
-export const useAuth = () => useContext(AuthContext);

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { IconExternal, IconUser } from "../components/Icons.jsx";
 import { Can, CopyField } from "../components/ui.jsx";
-import { useToast } from "../context/ToastContext.jsx";
+import { useToast } from "../context/toast.js";
 import { useAction } from "../hooks/useAction.js";
 import { customersApi } from "../lib/api.js";
 
