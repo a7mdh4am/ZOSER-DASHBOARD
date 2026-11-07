@@ -48,7 +48,8 @@ export function OrderItemsGrid({ items, nameClassName }) {
                 <span
                   className="color-dot"
                   style={{
-                    background: colorHex(it.color) || "var(--surface-2)",
+                    background:
+                      it.color_hex || colorHex(it.color) || "var(--surface-2)",
                   }}
                   title={it.color}
                 />

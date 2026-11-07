@@ -16,6 +16,7 @@ import {
   cityOf,
   db,
   depositsOf,
+  frontImageOf,
   newestFirst,
   nextId,
   nowIso,
@@ -197,7 +198,11 @@ on("POST", "/auth/logout", () => {
 on("GET", "/dashboard", dashboard);
 
 on("GET", "/geo/cities", () => ({
-  cities: db.cities.map(({ id, name, zones }) => ({ id, name, zones })),
+  cities: db.cities.map(({ id, name, zones }) => ({
+    id,
+    name,
+    zones: zones.map((z) => ({ id: z.id, name: z.name })),
+  })),
 }));
 
 /* ------------------------------------------------------------------ */
@@ -377,9 +382,18 @@ on("POST", "/orders/:id/design", ({ params, body }) => {
   order.addr = body.addr ?? null;
   order.song = body.song ?? null;
   order.notes = body.notes ?? null;
+  // A new color (or design) brings that color's code and picture with it.
+  const product = productOf(order);
   for (const { id, name, color } of body.items ?? []) {
     const card = order.cards.find((c) => c.id === id);
-    if (card) Object.assign(card, { name, color });
+    if (!card) continue;
+    card.name = name;
+    card.color = color;
+    const match = product?.colors.find((c) => c.name === color);
+    if (match) {
+      card.color_hex = match.hex;
+      card.full_image_url = frontImageOf(product, match) ?? card.full_image_url;
+    }
   }
   recalcTotals(order);
   return { id: order.id };
@@ -458,7 +472,12 @@ on("GET", "/production/orders", ({ query }) => {
       product_name: productOf(o)?.name ?? null,
       item_count: o.cards.length,
       group_name: o.group_name,
-      item_colors: o.cards.map((c) => c.color).join(","),
+      // Each color once, with its code, for the queue cards' color badges.
+      colors: [
+        ...new Map(
+          o.cards.map((c) => [c.color, { name: c.color, hex: c.color_hex }]),
+        ).values(),
+      ],
       song: o.song,
     })),
     counts: {
@@ -604,7 +623,10 @@ on("POST", "/products", ({ body }) => {
     name: body.name,
     slug: body.slug,
     description: body.description,
-    product_types: { code: body.typeCode, name: "NFC card" },
+    product_types: {
+      code: body.typeCode,
+      name: body.typeCode === "KEYCHAIN" ? "NFC keychain" : "NFC card",
+    },
     is_active: true,
     in_stock: body.inStock ?? true,
     is_new: Boolean(body.isNew),

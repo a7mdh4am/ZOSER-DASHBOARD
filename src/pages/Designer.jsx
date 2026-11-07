@@ -109,13 +109,12 @@ export default function Designer() {
                     </div>
                   </div>
                   <div className="row" style={{ marginTop: 10, gap: 6 }}>
-                    {[
-                      ...new Set(
-                        (o.item_colors || "").split(",").filter(Boolean),
-                      ),
-                    ].map((c) => (
-                      <Badge key={c} color={colorHex(c) || "var(--ink-3)"}>
-                        {c}
+                    {o.colors.map((c) => (
+                      <Badge
+                        key={c.name}
+                        color={c.hex || colorHex(c.name) || "var(--ink-3)"}
+                      >
+                        {c.name}
                       </Badge>
                     ))}
                     {o.song && <IconMusic />}

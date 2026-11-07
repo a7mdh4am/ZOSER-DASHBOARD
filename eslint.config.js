@@ -7,6 +7,8 @@ import { defineConfig, globalIgnores } from "eslint/config";
 // Same setup as the shop (ZOSER) and app (ZSRApp) projects.
 export default defineConfig([
   globalIgnores(["dist"]),
+  // Build config runs in Node.
+  { files: ["vite.config.js"], languageOptions: { globals: globals.node } },
   {
     files: ["**/*.{js,jsx}"],
     extends: [

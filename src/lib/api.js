@@ -16,7 +16,7 @@ const USE_MOCK = import.meta.env.VITE_MOCK_API
   : import.meta.env.DEV;
 
 const send = USE_MOCK
-  ? async (url, opts) => (await import("./mock/index.js")).mockFetch(url, opts)
+  ? async (url, opts) => (await import("dummy-api")).mockFetch(url, opts) // src/lib/mock (vite.config.js)
   : (url, opts) => fetch(url, opts);
 
 let csrfToken = "";

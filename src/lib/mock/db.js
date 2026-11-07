@@ -7,8 +7,14 @@
 // Everything here is made up, and contact details are unroutable on purpose:
 // @example.com emails, .example links, documentation-range IPs.
 
-import { colorHex } from "../format.js";
 import { PERMISSIONS } from "../permissions.js";
+import {
+  CARD_DESIGNS,
+  EXTRAS as SHOP_EXTRAS,
+  KEYCHAIN,
+  KEYCHAIN_DESIGNS,
+  PRICE,
+} from "./shop-catalog.js";
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -204,156 +210,213 @@ const STAFF = [
 /* geography                                                           */
 /* ------------------------------------------------------------------ */
 
+// Shipping is priced by zone: [zone, fee in EGP].
 const CITIES = [
-  ["Cairo", 70, ["Nasr City", "Maadi", "Heliopolis", "New Cairo", "Zamalek"]],
-  ["Giza", 70, ["Dokki", "Mohandessin", "Sheikh Zayed", "6th of October"]],
-  ["Alexandria", 85, ["Smouha", "Sidi Gaber", "Miami", "Gleem"]],
-  ["Mansoura", 100, ["Toriel", "El Mashaya"]],
-  ["Tanta", 100, ["El Galaa", "Seger"]],
-  ["Aswan", 120, ["Downtown Aswan"]],
-].map(([name, shippingFee, zones]) => ({
+  [
+    "Cairo",
+    [
+      ["Nasr City", 70],
+      ["Maadi", 70],
+      ["Heliopolis", 70],
+      ["New Cairo", 80],
+      ["Zamalek", 70],
+    ],
+  ],
+  [
+    "Giza",
+    [
+      ["Dokki", 70],
+      ["Mohandessin", 70],
+      ["Sheikh Zayed", 90],
+      ["6th of October", 90],
+    ],
+  ],
+  [
+    "Alexandria",
+    [
+      ["Smouha", 85],
+      ["Sidi Gaber", 85],
+      ["Miami", 90],
+      ["Gleem", 85],
+    ],
+  ],
+  [
+    "Mansoura",
+    [
+      ["Toriel", 100],
+      ["El Mashaya", 100],
+    ],
+  ],
+  [
+    "Tanta",
+    [
+      ["El Galaa", 100],
+      ["Seger", 105],
+    ],
+  ],
+  ["Aswan", [["Downtown Aswan", 120]]],
+].map(([name, zones]) => ({
   id: nextId(),
   name,
-  shippingFee,
-  zones: zones.map((zone) => ({ id: nextId(), name: zone })),
+  zones: zones.map(([zone, shippingFee]) => ({
+    id: nextId(),
+    name: zone,
+    shippingFee,
+  })),
 }));
 
 /* ------------------------------------------------------------------ */
 /* catalog                                                             */
 /* ------------------------------------------------------------------ */
 
-// `weight` is how often the seeded orders pick the design (0 = never sold).
-const PRODUCTS = [
-  {
-    name: "Classic Couples",
-    colors: ["black", "navy", "white"],
-    base: 650,
-    cost: 140,
-    weight: 6,
-  },
-  {
-    name: "Starry Night",
-    colors: ["navy", "purple"],
-    base: 720,
-    cost: 155,
-    weight: 5,
-  },
-  {
-    name: "Vinyl Record",
-    colors: ["black", "brick", "gold"],
-    base: 780,
-    cost: 170,
-    weight: 4,
-  },
-  {
-    name: "Polaroid Memories",
-    colors: ["white", "pink", "skyblue"],
-    base: 690,
-    cost: null,
-    weight: 3,
-  },
-  {
-    name: "Friends Forever",
-    colors: ["neon", "blue", "green", "pink"],
-    base: 600,
-    cost: 120,
-    weight: 3,
-  },
-  {
-    name: "Golden Script",
-    colors: ["gold", "black"],
-    base: 850,
-    cost: 190,
-    weight: 2,
-    in_stock: false,
-    is_limited: true,
-  },
-  {
-    name: "Retro Cassette",
-    colors: ["red", "grey"],
-    base: 640,
-    cost: null,
-    weight: 1,
-    is_active: false,
-  },
-  {
-    name: "Aurora Foil",
-    colors: ["silver", "purple"],
-    base: 900,
-    cost: 210,
-    weight: 0,
-    is_new: true,
-  },
-  // Deliberately incomplete: shows the "no colors!" / "no price tiers!" warnings.
-  {
-    name: "Untitled Draft",
-    colors: [],
-    base: null,
-    cost: null,
-    weight: 0,
-    is_active: false,
-    quantity: 0,
-  },
-];
+const cardImage = (file) =>
+  new URL(`./images/cards/${file}.webp`, import.meta.url).href;
+const keychainImage = (n) =>
+  new URL(`./images/keychains/${n}.webp`, import.meta.url).href;
+
+const CARD_TYPE = { code: "CARD", name: "NFC card" };
+const KEYCHAIN_TYPE = { code: "KEYCHAIN", name: "NFC keychain" };
+
+// Sold 2 to 10 at a time, at the shop's price per card or keychain.
+const priceTiers = () =>
+  Array.from({ length: 9 }, (_, i) => ({
+    id: nextId(),
+    cards_count: i + 2,
+    price: (i + 2) * PRICE,
+    discount_percentage: null,
+  }));
+
+// Dashboard-only facts the shop doesn't have: how often the seeded orders pick
+// each design (0 = not sold yet) and a unit cost for the Profit tab (null =
+// not set yet).
+const SALES = {
+  starrynight: [3, 95],
+  fingerprint: [2, 90],
+  evileye: [2, 90],
+  graffiti: [2, 90],
+  lovers: [4, 90],
+  luv: [2, 90],
+  memo: [3, null],
+  passport: [2, 90],
+  pixel: [0, 90],
+  seniors: [2, null],
+  sig: [4, 85],
+  snowman: [1, 90],
+  sprk: [2, 90],
+  star: [5, 95],
+  zebra: [3, 90],
+  keychain: [4, 60],
+  romantic: [0, null],
+};
+
+/** variants: [{ name, hex, front, back }] (image URLs or null). */
+function catalogProduct({ slug, name, description, type, variants, isActive }) {
+  const colors = variants.map((v) => ({
+    id: nextId(),
+    name: v.name,
+    hex: v.hex,
+  }));
+  const images = variants.flatMap((v, i) =>
+    [
+      ["face", v.front],
+      ["back", v.back],
+    ]
+      .filter(([, url]) => url)
+      .map(([kind, url]) => ({
+        id: nextId(),
+        image_url: url,
+        kind,
+        color_id: colors[i].id,
+        sort_order: 0,
+      })),
+  );
+  // The shop lists a design with its first color's front picture.
+  const cover = variants.find((v) => v.front)?.front;
+  if (cover) {
+    images.unshift({
+      id: nextId(),
+      image_url: cover,
+      kind: "gallery",
+      color_id: null,
+      sort_order: 0,
+    });
+  }
+  const [weight, cost] = SALES[slug];
+  const product = {
+    id: nextId(),
+    name,
+    slug,
+    description,
+    product_types: type,
+    is_active: isActive,
+    in_stock: true,
+    is_new: false,
+    is_limited: false,
+    quantity: int(40, 400),
+    unit_cost: cost,
+    colors,
+    product_images: images,
+    card_price_tiers: priceTiers(),
+  };
+  for (let i = 0; i < weight; i++) orderWeightedProducts.push(product);
+  return product;
+}
 
 const orderWeightedProducts = [];
 
-const CATALOG = PRODUCTS.map((spec) => {
-  const colors = spec.colors.map((name) => ({
-    id: nextId(),
-    name,
-    hex: colorHex(name) ?? "#9ca3af",
-  }));
-  const product = {
-    id: nextId(),
-    name: spec.name,
-    slug: spec.name.toLowerCase().replace(/\s+/g, "-"),
-    description: `${spec.name} NFC card design.`,
-    product_types: { code: "CARD", name: "NFC card" },
-    is_active: spec.is_active ?? true,
-    in_stock: spec.in_stock ?? true,
-    is_new: spec.is_new ?? false,
-    is_limited: spec.is_limited ?? false,
-    quantity: spec.quantity ?? int(40, 400),
-    unit_cost: spec.cost,
-    colors,
-    product_images: [
-      ...(spec.base
-        ? [
-            {
-              id: nextId(),
-              image_url: placeholderImage(spec.name, colors[0].hex),
-              kind: "gallery",
-              color_id: null,
-              sort_order: 0,
-            },
-          ]
-        : []),
-      ...colors.slice(0, 2).flatMap((c) =>
-        ["face", "back"].map((kind) => ({
-          id: nextId(),
-          image_url: placeholderImage(`${c.name} ${kind}`, c.hex),
-          kind,
-          color_id: c.id,
-          sort_order: 0,
-        })),
-      ),
+const CATALOG = [
+  ...CARD_DESIGNS.map((d) =>
+    catalogProduct({
+      slug: d.id,
+      name: d.name,
+      description: d.description,
+      type: CARD_TYPE,
+      isActive: true,
+      variants: d.variants.map((v) => ({
+        name: v.name,
+        hex: v.hex,
+        front: cardImage(`${v.file}_${v.key}`),
+        back: cardImage(`${v.file}_back_${v.key}`),
+      })),
+    }),
+  ),
+  catalogProduct({
+    slug: KEYCHAIN.id,
+    name: KEYCHAIN.name,
+    description: KEYCHAIN.description,
+    type: KEYCHAIN_TYPE,
+    isActive: true,
+    variants: KEYCHAIN_DESIGNS.map((k) => ({
+      name: k.name,
+      hex: k.tint,
+      front: keychainImage(k.image),
+      back: null,
+    })),
+  }),
+  // The shop keeps ROMANTIC switched off until it has a front picture; it's
+  // here, inactive, as it would be in the dashboard.
+  catalogProduct({
+    slug: "romantic",
+    name: "ROMANTIC",
+    description: "",
+    type: CARD_TYPE,
+    isActive: false,
+    variants: [
+      {
+        name: "Black",
+        hex: "#1A1A1A",
+        front: null,
+        back: cardImage("romantic_back_black"),
+      },
     ],
-    card_price_tiers:
-      spec.base == null
-        ? []
-        : [2, 3, 4, 5].map((cards) => ({
-            id: nextId(),
-            cards_count: cards,
-            price:
-              spec.base +
-              (cards - 2) * Math.round((spec.base * 0.38) / 10) * 10,
-            discount_percentage: cards === 5 ? 10 : null,
-          })),
-  };
-  for (let i = 0; i < spec.weight; i++) orderWeightedProducts.push(product);
-  return product;
-});
+  }),
+];
+
+/** The front picture of one of a product's colors (what the card looks like). */
+export const frontImageOf = (product, color) =>
+  product?.product_images.find(
+    (i) => i.kind === "face" && i.color_id === color?.id,
+  )?.image_url ?? null;
 
 const COUPONS = [
   ["WELCOME10", "percentage", 10, 60, null, null, 1, true],
@@ -477,11 +540,12 @@ const GROUP_NAMES = [
   "Besties",
   "The Originals",
 ];
-const EXTRAS = [
-  { extra_name: "Gift box", extra_price: 80 },
-  { extra_name: "Extra keychain", extra_price: 60 },
-  { extra_name: "Express production", extra_price: 120 },
-];
+const EXTRAS = SHOP_EXTRAS.map((x) => ({
+  extra_name: x.name,
+  extra_price: x.price,
+}));
+// The shop's suggestions for the place printed on a card.
+const PLACES = ["In Your Heart", "The Cinema", "Roma Cafe", "AUC University"];
 const CUSTOMER_NOTES = [
   "Please deliver after 5 PM.",
   "Call before delivery.",
@@ -594,10 +658,11 @@ for (let i = 0; i < ORDER_COUNT; i++) {
   const status = statusForAge(age);
   const customer = pick(CUSTOMERS);
   const product = pick(orderWeightedProducts);
+  // Keychain orders carry only a name and a design per keychain; cards also
+  // have the couple's/friends' date, place and song.
+  const isKeychain = product.product_types.code === "KEYCHAIN";
   const cardCount = pick(
-    product.name === "Friends Forever"
-      ? [3, 3, 4, 5]
-      : [2, 2, 2, 2, 2, 2, 3, 3, 4, 5],
+    isKeychain ? [2, 2, 2, 3, 3, 4, 5, 6] : [2, 2, 2, 2, 2, 2, 3, 3, 4, 5],
   );
   const coupon = chance(0.22) ? pick(ORDER_COUPONS) : null;
   const unitPrice = product.card_price_tiers.find(
@@ -620,13 +685,16 @@ for (let i = 0; i < ORDER_COUNT; i++) {
       : coupon.type === "fixed"
         ? coupon.value
         : Math.round((unitPrice * coupon.value) / 100),
-    shipping_fee: city.shippingFee,
-    group_name: cardCount > 2 ? pick(GROUP_NAMES) : null,
-    date: new Date(placedAt - int(100, 3000) * DAY_MS)
-      .toISOString()
-      .slice(0, 10),
-    addr: chance(0.4) ? pick(city.zones).name : null,
-    song: chance(0.6) ? `https://example.com/songs/${int(1000, 9999)}` : null,
+    shipping_fee: city.zones.find((z) => z.id === customer.zone_id).shippingFee,
+    group_name: !isKeychain && cardCount > 2 ? pick(GROUP_NAMES) : null,
+    date: isKeychain
+      ? null
+      : new Date(placedAt - int(100, 3000) * DAY_MS).toISOString().slice(0, 10),
+    addr: !isKeychain && chance(0.4) ? pick(PLACES) : null,
+    song:
+      !isKeychain && chance(0.6)
+        ? `https://example.com/songs/${int(1000, 9999)}`
+        : null,
     notes: chance(0.3) ? pick(CUSTOMER_NOTES) : null,
     shipping_id: null,
     profile_pid: null,
@@ -638,7 +706,8 @@ for (let i = 0; i < ORDER_COUNT; i++) {
         id: nextId(),
         name,
         color: color.name,
-        full_image_url: chance(0.6) ? placeholderImage(name, color.hex) : null,
+        color_hex: color.hex,
+        full_image_url: frontImageOf(product, color),
       };
     }),
   };
