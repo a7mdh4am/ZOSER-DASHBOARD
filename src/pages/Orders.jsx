@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  ChipGroup,
   Empty,
   OrderLink,
+  PageLoader,
   Pager,
   SearchInput,
-  Spinner,
   StatusBadge,
 } from "../components/ui.jsx";
+import { useApiData } from "../hooks/useApiData.js";
 import { ordersApi } from "../lib/api.js";
 import {
   fmtDate,
@@ -29,10 +30,6 @@ export default function Orders() {
   const search = params.get("q") ?? "";
   const page = Math.max(1, Number(params.get("page")) || 1);
 
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
   const setParam = (patch) =>
     setParams(
       (current) => {
@@ -46,20 +43,11 @@ export default function Orders() {
       { replace: true },
     );
 
-  useEffect(() => {
-    let alive = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- dims the table while the next page/filter loads
-    setLoading(true);
-    setError("");
-    ordersApi
-      .list({ status, search, page: String(page), per_page: "25" })
-      .then((d) => alive && setData(d))
-      .catch((e) => alive && setError(e.message))
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, [status, search, page]);
+  const { data, error, loading } = useApiData(
+    () =>
+      ordersApi.list({ status, search, page: String(page), per_page: "25" }),
+    [status, search, page],
+  );
 
   return (
     <div className="stack">
@@ -73,31 +61,19 @@ export default function Orders() {
         </div>
       </div>
 
-      <div className="chips" role="group" aria-label="Status filter">
-        <button
-          className={`chip${status === "" ? " active" : ""}`}
-          aria-pressed={status === ""}
-          onClick={() => setParam({ status: "" })}
-        >
-          All
-        </button>
-        {visibleStatuses.map((s) => (
-          <button
-            key={s}
-            className={`chip${status === s ? " active" : ""}`}
-            aria-pressed={status === s}
-            onClick={() => setParam({ status: s })}
-          >
-            {statusOf(s).label}
-          </button>
-        ))}
-      </div>
+      <ChipGroup
+        label="Status filter"
+        value={status}
+        onChange={(s) => setParam({ status: s })}
+        options={[
+          ["", "All"],
+          ...visibleStatuses.map((s) => [s, statusOf(s).label]),
+        ]}
+      />
 
       <div className="card">
         {loading && !data ? (
-          <div style={{ padding: 60 }}>
-            <Spinner />
-          </div>
+          <PageLoader />
         ) : error ? (
           <Empty title="Couldn't load orders" hint={error} />
         ) : !data.orders.length ? (

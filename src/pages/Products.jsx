@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconPlus, IconX } from "../components/Icons.jsx";
-import { Can, Empty, Modal, Spinner } from "../components/ui.jsx";
+import { Badge, Can, Empty, Modal, PageLoader } from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { useAction } from "../hooks/useAction.js";
+import { useApiData } from "../hooks/useApiData.js";
 import { productsApi } from "../lib/api.js";
 import { money } from "../lib/format.js";
 
@@ -15,30 +16,15 @@ import { money } from "../lib/format.js";
  * customer's own selection (see docs/API_MIGRATION_STATUS.md).
  */
 export default function Products() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
   const [editing, setEditing] = useState(null); // product summary object or 'new'
-
-  const load = useCallback(
-    () =>
-      productsApi
-        .list()
-        .then((products) => setData({ products }))
-        .catch((e) => setError(e.message)),
-    [],
-  );
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const {
+    data: products,
+    error,
+    reload: load,
+  } = useApiData(() => productsApi.list(), []);
 
   if (error) return <Empty title="Couldn't load products" hint={error} />;
-  if (!data)
-    return (
-      <div style={{ padding: 60 }}>
-        <Spinner />
-      </div>
-    );
+  if (!products) return <PageLoader />;
 
   return (
     <div className="stack">
@@ -56,7 +42,7 @@ export default function Products() {
       </div>
 
       <div className="design-grid">
-        {data.products.map((p) => (
+        {products.map((p) => (
           <ProductCard key={p.id} product={p} onEdit={() => setEditing(p)} />
         ))}
       </div>
@@ -140,13 +126,9 @@ function ProductCard({ product: p, onEdit }) {
             </div>
             <div className="row wrap" style={{ gap: 4, marginTop: 6 }}>
               {flagBadges(p).map(([label, color]) => (
-                <span
-                  key={label}
-                  className="badge"
-                  style={{ "--badge-c": color }}
-                >
+                <Badge key={label} color={color} dot={false}>
                   {label}
-                </span>
+                </Badge>
               ))}
             </div>
           </div>
@@ -217,7 +199,6 @@ function ProductModal({ productId, onClose, onChanged }) {
   const [product, setProduct] = useState(null); // full detail once loaded/created
   const [form, setForm] = useState(BLANK);
   const [slugTouched, setSlugTouched] = useState(!isNew);
-  const [busy, setBusy] = useState(false);
 
   // Re-reads the design without touching the form, so unsaved edits to the
   // name or description survive adding a color, image or price tier.
@@ -258,8 +239,7 @@ function ProductModal({ productId, onClose, onChanged }) {
     }));
   };
 
-  const save = async () => {
-    setBusy(true);
+  const [save, busy] = useAction(async () => {
     try {
       if (product) {
         await productsApi.save(product.id, {
@@ -293,10 +273,8 @@ function ProductModal({ productId, onClose, onChanged }) {
       onChanged();
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <Modal
@@ -418,16 +396,14 @@ function ProductModal({ productId, onClose, onChanged }) {
 function CoverImageEditor({ product, onChanged }) {
   const toast = useToast();
   const inputRef = useRef();
-  const [busy, setBusy] = useState(false);
   const cover = product.product_images.find(
     (i) => i.kind === "gallery" && !i.color_id,
   );
 
-  const upload = async (e) => {
+  const [upload, busy] = useAction(async (e) => {
     const picked = e.target.files?.[0];
     e.target.value = "";
     if (!picked) return;
-    setBusy(true);
     try {
       const fd = new FormData();
       fd.append("kind", "gallery");
@@ -437,10 +413,8 @@ function CoverImageEditor({ product, onChanged }) {
       onChanged();
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   const [clear] = useAction(async () => {
     try {
@@ -605,14 +579,12 @@ function ColorsEditor({ product, onChanged }) {
 function ColorImage({ productId, color, images, side, onChanged }) {
   const toast = useToast();
   const inputRef = useRef();
-  const [busy, setBusy] = useState(false);
   const image = images.find((i) => i.color_id === color.id && i.kind === side);
 
-  const upload = async (e) => {
+  const [upload, busy] = useAction(async (e) => {
     const picked = e.target.files?.[0];
     e.target.value = "";
     if (!picked) return;
-    setBusy(true);
     try {
       const fd = new FormData();
       fd.append("colorId", String(color.id));
@@ -624,10 +596,8 @@ function ColorImage({ productId, color, images, side, onChanged }) {
       onChanged();
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   const [clear] = useAction(async () => {
     try {

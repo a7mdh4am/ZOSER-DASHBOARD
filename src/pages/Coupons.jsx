@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { IconPlus, IconTag } from "../components/Icons.jsx";
-import { Empty, Modal, Spinner } from "../components/ui.jsx";
+import {
+  Badge,
+  Empty,
+  Modal,
+  PageLoader,
+  Segmented,
+} from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { useAction } from "../hooks/useAction.js";
+import { useApiData } from "../hooks/useApiData.js";
 import { couponsApi } from "../lib/api.js";
 import { fmtDate } from "../lib/format.js";
 
@@ -23,21 +30,12 @@ export default function Coupons() {
   const toast = useToast();
   const { can } = useAuth();
   const canEdit = can("coupons.manage");
-  const [coupons, setCoupons] = useState(null);
-  const [error, setError] = useState("");
   const [editing, setEditing] = useState(null); // row or 'new'
-
-  const load = useCallback(
-    () =>
-      couponsApi
-        .list()
-        .then(setCoupons)
-        .catch((e) => setError(e.message)),
-    [],
-  );
-  useEffect(() => {
-    load();
-  }, [load]);
+  const {
+    data: coupons,
+    error,
+    reload: load,
+  } = useApiData(() => couponsApi.list(), []);
 
   // One at a time: a double-click would otherwise toggle a coupon twice.
   const [toggle] = useAction(async (c) => {
@@ -61,12 +59,7 @@ export default function Coupons() {
   });
 
   if (error) return <Empty title="Couldn't load coupons" hint={error} />;
-  if (!coupons)
-    return (
-      <div style={{ padding: 60 }}>
-        <Spinner />
-      </div>
-    );
+  if (!coupons) return <PageLoader />;
 
   return (
     <div className="card">
@@ -134,17 +127,11 @@ export default function Coupons() {
                       {expired ? " · expired" : ""}
                     </td>
                     <td>
-                      <span
-                        className="badge"
-                        style={{
-                          "--badge-c": c.is_active
-                            ? "var(--st-paid)"
-                            : "var(--ink-3)",
-                        }}
+                      <Badge
+                        color={c.is_active ? "var(--st-paid)" : "var(--ink-3)"}
                       >
-                        <span className="dot" />
                         {c.is_active ? "active" : "inactive"}
-                      </span>
+                      </Badge>
                     </td>
                     {canEdit && (
                       <td style={{ textAlign: "right" }}>
@@ -212,12 +199,9 @@ function CouponModal({ coupon, onClose, onDone }) {
         }
       : BLANK,
   );
-  const [busy, setBusy] = useState(false);
-
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-  const submit = async () => {
-    setBusy(true);
+  const [submit, busy] = useAction(async () => {
     try {
       const body = {
         type: form.type,
@@ -237,9 +221,8 @@ function CouponModal({ coupon, onClose, onDone }) {
       onDone();
     } catch (err) {
       toast(err.message, "err");
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <Modal
@@ -291,22 +274,15 @@ function CouponModal({ coupon, onClose, onDone }) {
         <div className="grid-2" style={{ gap: 12 }}>
           <label className="field">
             <span>Type</span>
-            <div className="seg" style={{ display: "flex" }}>
-              {[
+            <Segmented
+              fill
+              value={form.type}
+              onChange={(type) => setForm({ ...form, type })}
+              options={[
                 ["percentage", "Percentage %"],
                 ["fixed", "Fixed EGP"],
-              ].map(([v, l]) => (
-                <button
-                  key={v}
-                  type="button"
-                  style={{ flex: 1 }}
-                  className={form.type === v ? "active" : ""}
-                  onClick={() => setForm({ ...form, type: v })}
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
+              ]}
+            />
           </label>
           <label className="field">
             <span>

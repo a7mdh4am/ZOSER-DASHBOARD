@@ -1,8 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AreaChart, BarList, StatCard } from "../components/charts.jsx";
-import { Empty, OrderLink, Spinner, StatusBadge } from "../components/ui.jsx";
+import {
+  Empty,
+  OrderLink,
+  PageLoader,
+  Segmented,
+  StatusBadge,
+} from "../components/ui.jsx";
 import { IconRefresh } from "../components/Icons.jsx";
+import { useApiData } from "../hooks/useApiData.js";
 import { dashboardApi } from "../lib/api.js";
 import { localISODate } from "../lib/dates.js";
 import { fmtDate, money, statusOf, STATUS_ORDER } from "../lib/format.js";
@@ -23,20 +30,9 @@ function pctDelta(now, prev) {
 }
 
 export default function Dashboard() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
   const [metric, setMetric] = useState("revenue");
   const navigate = useNavigate();
-
-  const load = () =>
-    dashboardApi
-      .get()
-      .then(setData)
-      .catch((e) => setError(e.message));
-
-  useEffect(() => {
-    load();
-  }, []);
+  const { data, error, reload } = useApiData(() => dashboardApi.get(), []);
 
   const series = useMemo(() => {
     if (!data) return [];
@@ -73,12 +69,7 @@ export default function Dashboard() {
   }, [data]);
 
   if (error) return <Empty title="Couldn't load the dashboard" hint={error} />;
-  if (!data)
-    return (
-      <div style={{ padding: 60 }}>
-        <Spinner />
-      </div>
-    );
+  if (!data) return <PageLoader />;
 
   const s = data.summary;
   const orderDelta = pctDelta(s.this_month_orders, s.last_month_orders);
@@ -115,25 +106,18 @@ export default function Dashboard() {
         <div className="card-head">
           <h3>Last 30 days</h3>
           <div className="grow" />
-          <div className="seg" role="group" aria-label="Metric">
-            <button
-              className={metric === "revenue" ? "active" : ""}
-              aria-pressed={metric === "revenue"}
-              onClick={() => setMetric("revenue")}
-            >
-              Revenue
-            </button>
-            <button
-              className={metric === "orders" ? "active" : ""}
-              aria-pressed={metric === "orders"}
-              onClick={() => setMetric("orders")}
-            >
-              Orders
-            </button>
-          </div>
+          <Segmented
+            label="Metric"
+            value={metric}
+            onChange={setMetric}
+            options={[
+              ["revenue", "Revenue"],
+              ["orders", "Orders"],
+            ]}
+          />
           <button
             className="btn ghost icon"
-            onClick={load}
+            onClick={reload}
             title="Refresh"
             aria-label="Refresh"
           >

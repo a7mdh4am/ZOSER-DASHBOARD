@@ -1,39 +1,47 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { IconExternal, IconPlus, IconX } from "../components/Icons.jsx";
-import { Can, Empty, Modal, Spinner } from "../components/ui.jsx";
+import { ThemeChips } from "../components/ThemeChips.jsx";
+import { Badge, Can, Empty, Modal, PageLoader } from "../components/ui.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { useAction } from "../hooks/useAction.js";
+import { useApiData } from "../hooks/useApiData.js";
 import { customersApi, themesApi } from "../lib/api.js";
 import { money } from "../lib/format.js";
+
+/** Color picker next to its hex value; editing either updates both. */
+function ColorInput({ value, onChange }) {
+  return (
+    <div className="row">
+      <input
+        type="color"
+        value={value}
+        style={{
+          width: 44,
+          height: 36,
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+        }}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <input
+        className="input"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
 
 /**
  * Themes: purchasable custom profile themes (create/edit + assign to a
  * customer) and site themes (profile color schemes).
  */
 export default function Themes() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-
-  const load = useCallback(
-    () =>
-      themesApi
-        .list()
-        .then(setData)
-        .catch((e) => setError(e.message)),
-    [],
-  );
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data, error, reload: load } = useApiData(() => themesApi.list(), []);
 
   if (error) return <Empty title="Couldn't load themes" hint={error} />;
-  if (!data)
-    return (
-      <div style={{ padding: 60 }}>
-        <Spinner />
-      </div>
-    );
+  if (!data) return <PageLoader />;
 
   return (
     <div className="stack">
@@ -61,10 +69,8 @@ const BLANK_CUSTOM = {
 function CustomThemes({ themes, onChanged }) {
   const toast = useToast();
   const [editing, setEditing] = useState(null);
-  const [busy, setBusy] = useState(false);
 
-  const save = async () => {
-    setBusy(true);
+  const [save, busy] = useAction(async () => {
     try {
       await themesApi.saveCustom({
         id: editing.id ?? undefined,
@@ -80,10 +86,8 @@ function CustomThemes({ themes, onChanged }) {
       onChanged();
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   const [toggle] = useAction(async (t) => {
     try {
@@ -128,20 +132,14 @@ function CustomThemes({ themes, onChanged }) {
                   <div className="row">
                     <span className="strong">{t.theme}</span>
                     {!!Number(t.is_new) && (
-                      <span
-                        className="badge"
-                        style={{ "--badge-c": "var(--accent)" }}
-                      >
+                      <Badge color="var(--accent)" dot={false}>
                         new
-                      </span>
+                      </Badge>
                     )}
                     {!Number(t.is_active) && (
-                      <span
-                        className="badge"
-                        style={{ "--badge-c": "var(--ink-3)" }}
-                      >
+                      <Badge color="var(--ink-3)" dot={false}>
                         disabled
-                      </span>
+                      </Badge>
                     )}
                     <div className="grow" />
                     <span className="strong mono">{money(t.price)}</span>
@@ -245,29 +243,10 @@ function CustomThemes({ themes, onChanged }) {
             </div>
             <label className="field">
               <span>Background color</span>
-              <div className="row">
-                <input
-                  type="color"
-                  value={editing.bg_color}
-                  style={{
-                    width: 44,
-                    height: 36,
-                    border: "none",
-                    background: "none",
-                    cursor: "pointer",
-                  }}
-                  onChange={(e) =>
-                    setEditing({ ...editing, bg_color: e.target.value })
-                  }
-                />
-                <input
-                  className="input"
-                  value={editing.bg_color}
-                  onChange={(e) =>
-                    setEditing({ ...editing, bg_color: e.target.value })
-                  }
-                />
-              </div>
+              <ColorInput
+                value={editing.bg_color}
+                onChange={(bg_color) => setEditing({ ...editing, bg_color })}
+              />
             </label>
             <label className="field">
               <span>Preview link (optional)</span>
@@ -314,33 +293,15 @@ function CustomThemes({ themes, onChanged }) {
 function AssignCard() {
   const toast = useToast();
   const [username, setUsername] = useState("");
-  const [lookup, setLookup] = useState(null); // {found, themes, link}
-  const [busy, setBusy] = useState(false);
+  // {found, themes, link, username}: remembers which account it's for, so
+  // editing the box afterwards can't send theme changes to another one.
+  const [lookup, setLookup] = useState(null);
 
-  const find = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+  const [find, busy] = useAction(async () => {
+    const name = username.trim();
     setLookup(null);
     try {
-      setLookup(await customersApi.lookup(username.trim()));
-    } catch (err) {
-      toast(err.message, "err");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const [toggleTheme] = useAction(async (t) => {
-    try {
-      const res = await themesApi.assign({
-        username: username.trim(),
-        themeId: t.theme_id,
-        action: t.status === "owned" ? "remove" : "assign",
-      });
-      toast(
-        t.status === "owned" ? `${t.theme} removed` : `${t.theme} assigned`,
-      );
-      setLookup((current) => ({ ...current, themes: res.themes }));
+      setLookup({ ...(await customersApi.lookup(name)), username: name });
     } catch (err) {
       toast(err.message, "err");
     }
@@ -352,7 +313,14 @@ function AssignCard() {
         <h3>Assign themes to a customer</h3>
       </div>
       <div className="card-body stack" style={{ gap: 12 }}>
-        <form className="row" onSubmit={find} style={{ maxWidth: 420 }}>
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            find();
+          }}
+          style={{ maxWidth: 420 }}
+        >
           <input
             className="input"
             value={username}
@@ -376,22 +344,17 @@ function AssignCard() {
           <>
             <div className="small muted">
               Click a theme to give it to / take it from{" "}
-              <strong style={{ color: "var(--ink)" }}>{username.trim()}</strong>
+              <strong style={{ color: "var(--ink)" }}>{lookup.username}</strong>
               :
             </div>
-            <div className="row wrap" style={{ gap: 8 }}>
-              {lookup.themes.map((t) => (
-                <button
-                  key={t.theme_id}
-                  type="button"
-                  className={`chip${t.status === "owned" ? " active" : ""}`}
-                  onClick={() => toggleTheme(t)}
-                >
-                  {t.status === "owned" ? "✓ " : ""}
-                  {t.theme}
-                </button>
-              ))}
-            </div>
+            <ThemeChips
+              username={lookup.username}
+              themes={lookup.themes}
+              onChange={(themes) =>
+                setLookup((current) => ({ ...current, themes }))
+              }
+              gap={8}
+            />
           </>
         )}
       </div>
@@ -412,7 +375,6 @@ const BLANK_SITE = {
 function SiteThemes({ themes, onChanged }) {
   const toast = useToast();
   const [adding, setAdding] = useState(null);
-  const [busy, setBusy] = useState(false);
 
   const [act] = useAction(async (fn, okMsg) => {
     try {
@@ -429,8 +391,7 @@ function SiteThemes({ themes, onChanged }) {
     act(() => themesApi.deleteSite(t.id), `${t.display_name} deleted`);
   };
 
-  const create = async () => {
-    setBusy(true);
+  const [create, busy] = useAction(async () => {
     try {
       await themesApi.createSite({
         name: adding.name,
@@ -444,10 +405,8 @@ function SiteThemes({ themes, onChanged }) {
       onChanged();
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   const sw = (c) => (
     <span
@@ -501,17 +460,13 @@ function SiteThemes({ themes, onChanged }) {
                   </div>
                 </td>
                 <td>
-                  <span
-                    className="badge"
-                    style={{
-                      "--badge-c": Number(t.is_active)
-                        ? "var(--st-paid)"
-                        : "var(--ink-3)",
-                    }}
+                  <Badge
+                    color={
+                      Number(t.is_active) ? "var(--st-paid)" : "var(--ink-3)"
+                    }
                   >
-                    <span className="dot" />
                     {Number(t.is_active) ? "active" : "disabled"}
-                  </span>
+                  </Badge>
                 </td>
                 <td style={{ textAlign: "right" }}>
                   <Can perm="catalog.themes.manage">
@@ -601,29 +556,10 @@ function SiteThemes({ themes, onChanged }) {
             ].map(([k, label]) => (
               <label className="field" key={k}>
                 <span>{label}</span>
-                <div className="row">
-                  <input
-                    type="color"
-                    value={adding[k]}
-                    style={{
-                      width: 44,
-                      height: 36,
-                      border: "none",
-                      background: "none",
-                      cursor: "pointer",
-                    }}
-                    onChange={(e) =>
-                      setAdding({ ...adding, [k]: e.target.value })
-                    }
-                  />
-                  <input
-                    className="input"
-                    value={adding[k]}
-                    onChange={(e) =>
-                      setAdding({ ...adding, [k]: e.target.value })
-                    }
-                  />
-                </div>
+                <ColorInput
+                  value={adding[k]}
+                  onChange={(color) => setAdding({ ...adding, [k]: color })}
+                />
               </label>
             ))}
           </div>

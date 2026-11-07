@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AreaChart,
@@ -9,17 +9,21 @@ import {
 } from "../components/charts.jsx";
 import { IconDownload, IconPlus, IconRefresh } from "../components/Icons.jsx";
 import {
+  Badge,
   Can,
+  ChipGroup,
   Empty,
   Modal,
   OrderLink,
+  PageLoader,
   Pager,
   SearchInput,
-  Spinner,
+  Segmented,
   StatusBadge,
 } from "../components/ui.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { useAction } from "../hooks/useAction.js";
+import { useApiData } from "../hooks/useApiData.js";
 import { financeApi } from "../lib/api.js";
 import { datedFileName, downloadCsv, saveFile } from "../lib/csv.js";
 import { localISODate } from "../lib/dates.js";
@@ -87,46 +91,27 @@ function qs(filters, extra = {}) {
  */
 const sectionCache = new Map();
 function useSection(section, filters, extra = {}) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
   const query = qs(filters, extra);
-  const url = `${section}?${query}`;
+  const key = `${section}?${query}`;
 
-  const load = useCallback(
-    (fresh = false) => {
-      setLoading(true);
-      setError("");
-      if (!fresh && sectionCache.has(url)) {
-        setData(sectionCache.get(url));
-        setLoading(false);
-        return Promise.resolve();
-      }
-      return financeApi
-        .section(section, query)
-        .then((d) => {
-          sectionCache.set(url, d);
-          setData(d);
-        })
-        .catch((e) => setError(e.message))
-        .finally(() => setLoading(false));
-    },
-    [section, query, url],
+  // A cached answer comes back as a plain value, so it shows without a spinner.
+  const { data, error, loading, reload } = useApiData(
+    () =>
+      sectionCache.get(key) ??
+      financeApi.section(section, query).then((d) => {
+        sectionCache.set(key, d);
+        return d;
+      }),
+    [section, query, key],
   );
-
-  // Fetch on mount and whenever the filters change.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- load() flags loading first
-    load();
-  }, [load]);
 
   return {
     data,
     error,
     loading,
     reload: () => {
-      sectionCache.delete(url);
-      return load(true);
+      sectionCache.delete(key);
+      return reload();
     },
   };
 }
@@ -154,12 +139,7 @@ function FormulaBox({ items }) {
 function SectionShell({ hook, children }) {
   if (hook.error)
     return <Empty title="Couldn't load this section" hint={hook.error} />;
-  if (!hook.data)
-    return (
-      <div style={{ padding: 50 }}>
-        <Spinner />
-      </div>
-    );
+  if (!hook.data) return <PageLoader padding={50} />;
   return children(hook.data);
 }
 
@@ -210,17 +190,13 @@ export default function Finance() {
     <div className="stack">
       {/* filters shared by every tab */}
       <div className="row wrap no-print">
-        <div className="chips" style={{ flex: "1 1 auto" }}>
-          {PRESETS.map(([v, l]) => (
-            <button
-              key={v}
-              className={`chip${preset === v ? " active" : ""}`}
-              onClick={() => applyPreset(v)}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
+        <ChipGroup
+          label="Date range"
+          style={{ flex: "1 1 auto" }}
+          value={preset}
+          onChange={applyPreset}
+          options={PRESETS}
+        />
         <button className="btn sm no-print" onClick={() => window.print()}>
           Print / PDF
         </button>
@@ -302,22 +278,13 @@ export default function Finance() {
       </div>
 
       {/* tabs */}
-      <div
-        className="chips no-print"
-        role="group"
-        aria-label="Finance sections"
-      >
-        {TABS.map(([v, l]) => (
-          <button
-            key={v}
-            className={`chip${tab === v ? " active" : ""}`}
-            aria-pressed={tab === v}
-            onClick={() => setTab(v)}
-          >
-            {l}
-          </button>
-        ))}
-      </div>
+      <ChipGroup
+        label="Finance sections"
+        className="no-print"
+        value={tab}
+        onChange={setTab}
+        options={TABS}
+      />
 
       {tab === "overview" && (
         <OverviewTab filters={filters} onOptions={setOptions} />
@@ -473,33 +440,28 @@ function OverviewTab({ filters, onOptions }) {
               <div className="card-head">
                 <h3>Revenue</h3>
                 <div className="grow" />
-                <div className="seg">
-                  {["day", "week", "month", "year"].map((g) => (
-                    <button
-                      key={g}
-                      className={granularity === g ? "active" : ""}
-                      onClick={() => setGranularity(g)}
-                    >
-                      {g[0].toUpperCase() + g.slice(1)}
-                    </button>
-                  ))}
-                </div>
-                <div className="seg">
-                  {[
+                <Segmented
+                  label="Group by"
+                  value={granularity}
+                  onChange={setGranularity}
+                  options={[
+                    ["day", "Day"],
+                    ["week", "Week"],
+                    ["month", "Month"],
+                    ["year", "Year"],
+                  ]}
+                />
+                <Segmented
+                  label="Metric"
+                  value={metric}
+                  onChange={setMetric}
+                  options={[
                     ["net", "Net"],
                     ["gross", "Gross"],
                     ["orders", "Orders"],
                     ["discounts", "Discounts"],
-                  ].map(([v, lbl]) => (
-                    <button
-                      key={v}
-                      className={metric === v ? "active" : ""}
-                      onClick={() => setMetric(v)}
-                    >
-                      {lbl}
-                    </button>
-                  ))}
-                </div>
+                  ]}
+                />
                 <button
                   className="btn ghost icon"
                   onClick={hook.reload}
@@ -592,12 +554,11 @@ function OrdersTab({ filters }) {
   const [sort, setSort] = useState("order_time");
   const [dir, setDir] = useState("desc");
   const [page, setPage] = useState(1);
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
   const navigate = useNavigate();
   const toast = useToast();
 
   const query = qs(filters, { search, sort, dir, page, perPage: 25 });
+  const { data, error } = useApiData(() => financeApi.orders(query), [query]);
 
   // Every matching order, not just this page.
   const [exportCsv] = useAction(async () => {
@@ -610,17 +571,6 @@ function OrdersTab({ filters }) {
       toast(err.message, "err");
     }
   });
-
-  useEffect(() => {
-    let alive = true;
-    financeApi
-      .orders(query)
-      .then((d) => alive && setData(d))
-      .catch((e) => alive && setError(e.message));
-    return () => {
-      alive = false;
-    };
-  }, [query]);
 
   const th = (key, label, numeric = false) => (
     <th
@@ -658,9 +608,7 @@ function OrdersTab({ filters }) {
 
       <div className="card">
         {!data ? (
-          <div style={{ padding: 50 }}>
-            <Spinner />
-          </div>
+          <PageLoader padding={50} />
         ) : (
           <>
             <div className="table-scroll">
@@ -711,15 +659,9 @@ function OrdersTab({ filters }) {
                       </td>
                       <td className="num">{money(r.balance)}</td>
                       <td>
-                        <span
-                          className="badge"
-                          style={{
-                            "--badge-c": PAYMENT_STATUS_COLOR[r.payment_status],
-                          }}
-                        >
-                          <span className="dot" />
+                        <Badge color={PAYMENT_STATUS_COLOR[r.payment_status]}>
                           {r.payment_status}
-                        </span>
+                        </Badge>
                       </td>
                     </tr>
                   ))}
@@ -905,14 +847,14 @@ function ProductsTab({ filters }) {
                 </div>
                 <div className="card-body row wrap">
                   {d.never_sold.map((p) => (
-                    <span
+                    <Badge
                       key={p.id ?? p.name}
-                      className="badge"
-                      style={{ "--badge-c": "var(--ink-3)" }}
+                      color="var(--ink-3)"
+                      dot={false}
                     >
                       {p.name}
                       {!p.is_active && " (inactive)"}
-                    </span>
+                    </Badge>
                   ))}
                 </div>
               </div>
@@ -1737,18 +1679,15 @@ function CashflowTab({ filters }) {
                         <td className="small muted">{fmtDate(e.created_at)}</td>
                         <td>{e.description}</td>
                         <td>
-                          <span
-                            className="badge"
-                            style={{
-                              "--badge-c":
-                                e.type === "expense"
-                                  ? "var(--st-pending)"
-                                  : "var(--st-paid)",
-                            }}
+                          <Badge
+                            color={
+                              e.type === "expense"
+                                ? "var(--st-pending)"
+                                : "var(--st-paid)"
+                            }
                           >
-                            <span className="dot" />
                             {e.type}
-                          </span>
+                          </Badge>
                         </td>
                         <td>{e.order_id ? `#${e.order_id}` : "—"}</td>
                         <td
@@ -1797,22 +1736,15 @@ function CashflowTab({ filters }) {
                 <div className="stack" style={{ gap: 14 }}>
                   <label className="field">
                     <span>Type</span>
-                    <div className="seg" style={{ display: "flex" }}>
-                      {[
+                    <Segmented
+                      fill
+                      value={form.type}
+                      onChange={(type) => setForm({ ...form, type })}
+                      options={[
                         ["expense", "Expense"],
                         ["income", "Income"],
-                      ].map(([v, l]) => (
-                        <button
-                          key={v}
-                          type="button"
-                          style={{ flex: 1 }}
-                          className={form.type === v ? "active" : ""}
-                          onClick={() => setForm({ ...form, type: v })}
-                        >
-                          {l}
-                        </button>
-                      ))}
-                    </div>
+                      ]}
+                    />
                     <span className="small muted">
                       Deposits are recorded from the order page; refunds are set
                       via an order's payment status.

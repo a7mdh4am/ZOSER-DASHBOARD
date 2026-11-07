@@ -1,79 +1,53 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { IconMusic, IconPhone } from "../components/Icons.jsx";
 import {
-  IconDownload,
-  IconMusic,
-  IconPhone,
-  IconWhatsapp,
-} from "../components/Icons.jsx";
+  CustomizationFields,
+  OrderItemsGrid,
+  PhoneActions,
+} from "../components/order.jsx";
 import {
-  CopyButton,
+  Badge,
   Empty,
   Modal,
+  PageLoader,
   Pager,
   SearchInput,
-  Spinner,
+  Segmented,
   StatusBadge,
+  TimelineItem,
 } from "../components/ui.jsx";
 import { useToast } from "../context/ToastContext.jsx";
+import { useAction } from "../hooks/useAction.js";
+import { useApiData } from "../hooks/useApiData.js";
 import { designerApi } from "../lib/api.js";
-import {
-  colorHex,
-  fmtDate,
-  fmtProductionDate,
-  relDay,
-  waLink,
-} from "../lib/format.js";
+import { colorHex, fmtDate, relDay } from "../lib/format.js";
 
 export default function Designer() {
   const [tab, setTab] = useState("1"); // '1' deposited (to design) | '5' in production
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [openId, setOpenId] = useState(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError("");
-    return designerApi
-      .list({ status: tab, search, page: String(page) })
-      .then(setData)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [tab, search, page]);
-
-  // Fetch on mount and whenever the tab, search or page changes.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- load() flags loading first
-    load();
-  }, [load]);
+  const { data, error, loading, reload } = useApiData(
+    () => designerApi.list({ status: tab, search, page: String(page) }),
+    [tab, search, page],
+  );
 
   return (
     <div className="stack">
       <div className="row wrap">
-        <div className="seg" role="group" aria-label="Queue">
-          <button
-            className={tab === "1" ? "active" : ""}
-            aria-pressed={tab === "1"}
-            onClick={() => {
-              setTab("1");
-              setPage(1);
-            }}
-          >
-            To design{data ? ` · ${data.counts.deposited}` : ""}
-          </button>
-          <button
-            className={tab === "5" ? "active" : ""}
-            aria-pressed={tab === "5"}
-            onClick={() => {
-              setTab("5");
-              setPage(1);
-            }}
-          >
-            In production{data ? ` · ${data.counts.production}` : ""}
-          </button>
-        </div>
+        <Segmented
+          label="Queue"
+          value={tab}
+          onChange={(v) => {
+            setTab(v);
+            setPage(1);
+          }}
+          options={[
+            ["1", `To design${data ? ` · ${data.counts.deposited}` : ""}`],
+            ["5", `In production${data ? ` · ${data.counts.production}` : ""}`],
+          ]}
+        />
         <div className="grow" style={{ minWidth: 200, maxWidth: 380 }}>
           <SearchInput
             value={search}
@@ -87,9 +61,7 @@ export default function Designer() {
       </div>
 
       {loading && !data ? (
-        <div style={{ padding: 60 }}>
-          <Spinner />
-        </div>
+        <PageLoader />
       ) : error ? (
         <Empty title="Couldn't load the queue" hint={error} />
       ) : !data.orders.length ? (
@@ -141,15 +113,10 @@ export default function Designer() {
                       ...new Set(
                         (o.item_colors || "").split(",").filter(Boolean),
                       ),
-                    ].map((c, i) => (
-                      <span
-                        key={i}
-                        className="badge"
-                        style={{ "--badge-c": colorHex(c) || "var(--ink-3)" }}
-                      >
-                        <span className="dot" />
+                    ].map((c) => (
+                      <Badge key={c} color={colorHex(c) || "var(--ink-3)"}>
                         {c}
-                      </span>
+                      </Badge>
                     ))}
                     {o.song && <IconMusic />}
                   </div>
@@ -174,7 +141,7 @@ export default function Designer() {
           onClose={() => setOpenId(null)}
           onChanged={() => {
             setOpenId(null);
-            load();
+            reload();
           }}
         />
       )}
@@ -184,37 +151,19 @@ export default function Designer() {
 
 function DesignDetail({ id, onClose, onChanged }) {
   const toast = useToast();
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const { data, error } = useApiData(() => designerApi.get(id), [id]);
 
-  useEffect(() => {
-    designerApi
-      .get(id)
-      .then(setData)
-      .catch((e) => setError(e.message));
-  }, [id]);
-
-  const moveToProduction = async () => {
-    setBusy(true);
+  const [moveToProduction, busy] = useAction(async () => {
     try {
       await designerApi.setStatus(id);
       toast(`Order #${id} moved to production`);
       onChanged();
     } catch (err) {
       toast(err.message, "err");
-      setBusy(false);
     }
-  };
+  });
 
   const order = data?.order;
-  const fields = order
-    ? [
-        ["Group name", order.group_name],
-        ["Anniversary date", order.date ? fmtProductionDate(order.date) : null],
-        ["Addr", order.addr],
-      ].filter(([, v]) => v)
-    : [];
 
   return (
     <Modal
@@ -241,9 +190,7 @@ function DesignDetail({ id, onClose, onChanged }) {
       {error ? (
         <Empty title="Couldn't load order" hint={error} />
       ) : !data ? (
-        <div style={{ padding: 40 }}>
-          <Spinner />
-        </div>
+        <PageLoader padding={40} />
       ) : (
         <div className="stack" style={{ gap: 18 }}>
           <div className="row wrap" style={{ gap: 8 }}>
@@ -261,114 +208,11 @@ function DesignDetail({ id, onClose, onChanged }) {
               <div className="small strong muted" style={{ marginBottom: 8 }}>
                 CARDS ({data.items.length})
               </div>
-              <div className="items-grid">
-                {data.items.map((it, i) => (
-                  <div className="item-cell" key={i}>
-                    {it.full_image_url ? (
-                      <a
-                        href={it.full_image_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <img
-                          className="item-thumb"
-                          src={it.full_image_url}
-                          alt={it.name}
-                          loading="lazy"
-                        />
-                      </a>
-                    ) : (
-                      <div
-                        className="item-thumb"
-                        style={{
-                          display: "grid",
-                          placeItems: "center",
-                          color: "var(--ink-3)",
-                        }}
-                      >
-                        No image
-                      </div>
-                    )}
-                    <div className="in">
-                      <span className="copy-line">
-                        {it.name}
-                        <CopyButton text={it.name} label="name" />
-                      </span>
-                    </div>
-                    <div className="row" style={{ gap: 6, marginTop: 2 }}>
-                      {it.color && (
-                        <>
-                          <span
-                            className="color-dot"
-                            style={{
-                              background:
-                                colorHex(it.color) || "var(--surface-2)",
-                            }}
-                            title={it.color}
-                          />
-                          <span className="small muted">{it.color}</span>
-                        </>
-                      )}
-                      {it.full_image_url && (
-                        <a
-                          className="small"
-                          style={{
-                            color: "var(--accent)",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 4,
-                          }}
-                          href={it.full_image_url}
-                          download
-                        >
-                          <IconDownload size={12} /> Download
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <OrderItemsGrid items={data.items} nameClassName="copy-line" />
             </div>
           )}
 
-          {/* customization */}
-          <div className="kv">
-            {fields.map(([k, v]) => (
-              <div className="kv-item" key={k}>
-                <div className="k">{k}</div>
-                <div className="v copy-line">
-                  {v}
-                  <CopyButton text={v} label={k} />
-                </div>
-              </div>
-            ))}
-            {order.song && (
-              <div className="kv-item full">
-                <div className="k">Song</div>
-                <div className="v copy-line">
-                  <IconMusic />
-                  <a
-                    href={order.song}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: "var(--accent)", overflowWrap: "anywhere" }}
-                  >
-                    {order.song}
-                  </a>
-                  <CopyButton text={order.song} label="song URL" />
-                </div>
-              </div>
-            )}
-            {order.notes && (
-              <div className="kv-item full">
-                <div className="k">Customer notes</div>
-                <div className="v copy-line" style={{ whiteSpace: "pre-wrap" }}>
-                  {order.notes}
-                  <CopyButton text={order.notes} label="notes" />
-                </div>
-              </div>
-            )}
-          </div>
+          <CustomizationFields order={order} />
 
           {/* production notes */}
           {data.notes.length > 0 && (
@@ -378,29 +222,20 @@ function DesignDetail({ id, onClose, onChanged }) {
               </div>
               <div className="timeline">
                 {data.notes.map((n, i) => (
-                  <div className="tl-item" key={i}>
-                    <div className="tl-rail">
-                      <div
-                        className="tl-dot"
-                        style={{ "--tl-c": "var(--st-production)" }}
-                      />
-                      <div className="tl-line" />
-                    </div>
-                    <div className="grow">
-                      <div style={{ whiteSpace: "pre-wrap" }}>{n.edits}</div>
-                      {n.image_url && (
-                        <a
-                          className="small"
-                          style={{ color: "var(--accent)" }}
-                          href={n.image_url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          View attachment
-                        </a>
-                      )}
-                    </div>
-                  </div>
+                  <TimelineItem key={i} color="var(--st-production)">
+                    <div style={{ whiteSpace: "pre-wrap" }}>{n.edits}</div>
+                    {n.image_url && (
+                      <a
+                        className="small"
+                        style={{ color: "var(--accent)" }}
+                        href={n.image_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View attachment
+                      </a>
+                    )}
+                  </TimelineItem>
                 ))}
               </div>
             </div>
@@ -415,18 +250,7 @@ function DesignDetail({ id, onClose, onChanged }) {
             <span>
               {order.full_name} · <span className="mono">{order.phone}</span>
             </span>
-            <CopyButton text={order.phone} label="phone" />
-            <a
-              className="copy-btn"
-              style={{ color: "var(--st-shipped)" }}
-              href={waLink(order.phone)}
-              target="_blank"
-              rel="noreferrer"
-              title="WhatsApp"
-              aria-label="Message on WhatsApp"
-            >
-              <IconWhatsapp />
-            </a>
+            <PhoneActions phone={order.phone} />
           </div>
         </div>
       )}

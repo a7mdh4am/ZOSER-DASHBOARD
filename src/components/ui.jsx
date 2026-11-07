@@ -16,6 +16,13 @@ export const Spinner = () => (
   <div className="spinner" role="status" aria-label="Loading" />
 );
 
+/** Spinner with room around it, for a page or section that's still loading. */
+export const PageLoader = ({ padding = 60 }) => (
+  <div style={{ padding }}>
+    <Spinner />
+  </div>
+);
+
 /**
  * Section-level permission gate: renders `children` only when the current
  * user holds `perm` (a code from lib/permissions.js, e.g. "profiles.create").
@@ -37,15 +44,92 @@ export const OrderLink = ({ id }) => (
   </Link>
 );
 
+/**
+ * Colored pill. `color` is any CSS color (usually a var); `dot` adds the
+ * leading dot; `style` is merged in.
+ */
+export const Badge = ({ color, dot = true, style, children }) => (
+  <span className="badge" style={{ "--badge-c": color, ...style }}>
+    {dot && <span className="dot" aria-hidden />}
+    {children}
+  </span>
+);
+
 export const StatusBadge = ({ status }) => {
   const s = statusOf(status);
-  return (
-    <span className="badge" style={{ "--badge-c": s.color }}>
-      <span className="dot" aria-hidden />
-      {s.label}
-    </span>
-  );
+  return <Badge color={s.color}>{s.label}</Badge>;
 };
+
+/**
+ * Segmented control (.seg): one button per option, the chosen one active.
+ * `options` is [[value, label], ...]. `fill` stretches it to the container's
+ * width with equal buttons, as in forms.
+ */
+export function Segmented({ options, value, onChange, label, fill, style }) {
+  return (
+    <div
+      className="seg"
+      role="group"
+      aria-label={label}
+      style={fill ? { display: "flex", ...style } : style}
+    >
+      {options.map(([v, text]) => (
+        <button
+          key={v}
+          type="button"
+          className={value === v ? "active" : ""}
+          aria-pressed={value === v}
+          style={fill ? { flex: 1 } : undefined}
+          onClick={() => onChange(v)}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A row of filter chips (.chips), one of them active. Same options shape as Segmented. */
+export function ChipGroup({
+  options,
+  value,
+  onChange,
+  label,
+  className,
+  style,
+}) {
+  return (
+    <div
+      className={className ? `chips ${className}` : "chips"}
+      role="group"
+      aria-label={label}
+      style={style}
+    >
+      {options.map(([v, text]) => (
+        <button
+          key={v}
+          type="button"
+          className={`chip${value === v ? " active" : ""}`}
+          aria-pressed={value === v}
+          onClick={() => onChange(v)}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** One entry of a `.timeline`: a colored dot on the rail, then the content. */
+export const TimelineItem = ({ color, children }) => (
+  <div className="tl-item">
+    <div className="tl-rail">
+      <div className="tl-dot" style={{ "--tl-c": color }} />
+      <div className="tl-line" />
+    </div>
+    <div className="grow">{children}</div>
+  </div>
+);
 
 export const Empty = ({ title = "Nothing here", hint }) => (
   <div className="empty">
@@ -81,6 +165,24 @@ export function CopyButton({ text, label }) {
     </button>
   );
 }
+
+/** A value (e.g. a profile link) in a shaded box with a copy button. */
+export const CopyField = ({ value, label, style }) => (
+  <div
+    className="copy-line"
+    style={{
+      background: "var(--surface-2)",
+      borderRadius: 8,
+      padding: "8px 10px",
+      ...style,
+    }}
+  >
+    <span className="small mono grow" style={{ overflowWrap: "anywhere" }}>
+      {value}
+    </span>
+    <CopyButton text={value} label={label} />
+  </div>
+);
 
 export function SearchInput({
   value,

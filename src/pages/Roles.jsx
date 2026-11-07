@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { IconKey, IconPlus } from "../components/Icons.jsx";
-import { Empty, Modal, Spinner } from "../components/ui.jsx";
+import { Badge, Empty, Modal, PageLoader } from "../components/ui.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { useAction } from "../hooks/useAction.js";
+import { useApiData } from "../hooks/useApiData.js";
 import { rolesApi } from "../lib/api.js";
 
 /** Groups a flat permission code list by its prefix before the first dot (e.g. "orders.view" -> "orders"). */
@@ -16,24 +17,11 @@ function groupByArea(permissionCatalog) {
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
-/** Custom staff roles — Node's flat admin_permissions catalog (roles.manage-equivalent: admins.roles.manage). */
+/** Staff roles: each one grants a set of the dashboard's permission codes (lib/permissions.js). */
 export default function Roles() {
   const toast = useToast();
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
   const [editing, setEditing] = useState(null); // role row, or 'new'
-
-  const load = useCallback(
-    () =>
-      rolesApi
-        .list()
-        .then(setData)
-        .catch((e) => setError(e.message)),
-    [],
-  );
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data, error, reload: load } = useApiData(() => rolesApi.list(), []);
 
   const [remove] = useAction(async (role) => {
     if (!window.confirm(`Delete the "${role.name}" role?`)) return;
@@ -47,12 +35,7 @@ export default function Roles() {
   });
 
   if (error) return <Empty title="Couldn't load roles" hint={error} />;
-  if (!data)
-    return (
-      <div style={{ padding: 60 }}>
-        <Spinner />
-      </div>
-    );
+  if (!data) return <PageLoader />;
 
   return (
     <div className="card">
@@ -81,13 +64,7 @@ export default function Roles() {
                   <span className="strong">{r.name}</span>
                   <span className="small mono muted">{r.code}</span>
                   {r.isSystem && (
-                    <span
-                      className="badge"
-                      style={{ "--badge-c": "var(--st-cancelled)" }}
-                    >
-                      <span className="dot" />
-                      built-in
-                    </span>
+                    <Badge color="var(--st-cancelled)">built-in</Badge>
                   )}
                 </div>
                 {r.description && (
@@ -142,7 +119,6 @@ function RoleEditor({ role, permissionCatalog, onClose, onDone }) {
   const [selected, setSelected] = useState(
     () => new Set(role?.permissions || []),
   );
-  const [busy, setBusy] = useState(false);
   const areas = groupByArea(permissionCatalog);
 
   const toggle = (permCode) =>
@@ -153,8 +129,7 @@ function RoleEditor({ role, permissionCatalog, onClose, onDone }) {
       return next;
     });
 
-  const submit = async () => {
-    setBusy(true);
+  const [submit, busy] = useAction(async () => {
     try {
       const body = {
         name,
@@ -171,9 +146,8 @@ function RoleEditor({ role, permissionCatalog, onClose, onDone }) {
       onDone();
     } catch (err) {
       toast(err.message, "err");
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <Modal

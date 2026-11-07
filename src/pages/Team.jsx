@@ -1,9 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { IconPlus, IconShield } from "../components/Icons.jsx";
-import { Empty, Modal, Pager, Spinner } from "../components/ui.jsx";
+import {
+  Badge,
+  Empty,
+  Modal,
+  PageLoader,
+  Pager,
+  Segmented,
+  TimelineItem,
+} from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { useAction } from "../hooks/useAction.js";
+import { useApiData } from "../hooks/useApiData.js";
 import { activityApi, rolesApi, teamApi } from "../lib/api.js";
 import { fmtDate } from "../lib/format.js";
 
@@ -21,27 +30,16 @@ export default function Team() {
 
   return (
     <div className="stack">
-      <div
-        className="seg"
+      <Segmented
+        label="Team sections"
         style={{ alignSelf: "flex-start" }}
-        role="group"
-        aria-label="Team sections"
-      >
-        <button
-          className={tab === "users" ? "active" : ""}
-          aria-pressed={tab === "users"}
-          onClick={() => setTab("users")}
-        >
-          Users
-        </button>
-        <button
-          className={tab === "activity" ? "active" : ""}
-          aria-pressed={tab === "activity"}
-          onClick={() => setTab("activity")}
-        >
-          Activity feed
-        </button>
-      </div>
+        value={tab}
+        onChange={setTab}
+        options={[
+          ["users", "Users"],
+          ["activity", "Activity feed"],
+        ]}
+      />
       {tab === "users" ? <UsersTab /> : <ActivityFeed />}
     </div>
   );
@@ -52,29 +50,17 @@ export default function Team() {
 function UsersTab() {
   const toast = useToast();
   const { user: self } = useAuth();
-  const [users, setUsers] = useState(null);
-  const [roles, setRoles] = useState([]);
-  const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [historyFor, setHistoryFor] = useState(null); // user row
 
-  const load = useCallback(
-    () =>
-      teamApi
-        .list()
-        .then(setUsers)
-        .catch((e) => setError(e.message)),
-    [],
-  );
-  useEffect(() => {
-    load();
-  }, [load]);
-  useEffect(() => {
-    rolesApi
-      .list()
-      .then((d) => setRoles(d.roles))
-      .catch(() => setRoles([]));
-  }, []);
+  const {
+    data: users,
+    error,
+    reload: load,
+  } = useApiData(() => teamApi.list(), []);
+  // For the New user form; if it fails to load the role list is just empty.
+  const { data: roleData } = useApiData(() => rolesApi.list(), []);
+  const roles = roleData?.roles ?? [];
 
   const [toggle] = useAction(async (u) => {
     try {
@@ -89,12 +75,7 @@ function UsersTab() {
   });
 
   if (error) return <Empty title="Couldn't load the team" hint={error} />;
-  if (!users)
-    return (
-      <div style={{ padding: 60 }}>
-        <Spinner />
-      </div>
-    );
+  if (!users) return <PageLoader />;
 
   return (
     <div className="card">
@@ -137,29 +118,17 @@ function UsersTab() {
                   </div>
                 </td>
                 <td>
-                  <span
-                    className="badge"
-                    style={{ "--badge-c": roleColor(u.role) }}
-                  >
-                    <span className="dot" />
-                    {u.roleName}
-                  </span>
+                  <Badge color={roleColor(u.role)}>{u.roleName}</Badge>
                 </td>
                 <td className="small">
                   {u.email || <span className="muted">—</span>}
                 </td>
                 <td>
-                  <span
-                    className="badge"
-                    style={{
-                      "--badge-c": u.isBlocked
-                        ? "var(--ink-3)"
-                        : "var(--st-paid)",
-                    }}
+                  <Badge
+                    color={u.isBlocked ? "var(--ink-3)" : "var(--st-paid)"}
                   >
-                    <span className="dot" />
                     {u.isBlocked ? "deactivated" : "active"}
-                  </span>
+                  </Badge>
                 </td>
                 <td style={{ textAlign: "right" }}>
                   <div
@@ -215,12 +184,9 @@ function CreateUserModal({ roles, onClose, onDone }) {
   const assignable = roles.filter((r) => !r.isSystem);
   const list = assignable.length ? assignable : roles;
   const [form, setForm] = useState({ ...BLANK, role: list[0]?.code || "" });
-  const [busy, setBusy] = useState(false);
-
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-  const submit = async () => {
-    setBusy(true);
+  const [submit, busy] = useAction(async () => {
     try {
       await teamApi.create({
         username: form.username,
@@ -232,9 +198,8 @@ function CreateUserModal({ roles, onClose, onDone }) {
       onDone();
     } catch (err) {
       toast(err.message, "err");
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <Modal
@@ -319,39 +284,33 @@ function ActivityList({ rows }) {
   return (
     <div className="timeline">
       {rows.map((r) => (
-        <div className="tl-item" key={r.id}>
-          <div className="tl-rail">
-            <div
-              className="tl-dot"
-              style={{
-                "--tl-c": r.action.startsWith("auth.")
-                  ? "var(--st-deposited)"
-                  : r.action.includes("fail")
-                    ? "var(--st-cancelled)"
-                    : "var(--accent)",
-              }}
-            />
-            <div className="tl-line" />
-          </div>
-          <div className="grow">
-            <div className="row wrap" style={{ gap: 6 }}>
-              <span className="badge" style={{ "--badge-c": "var(--ink-3)" }}>
-                {r.action}
+        <TimelineItem
+          key={r.id}
+          color={
+            r.action.startsWith("auth.")
+              ? "var(--st-deposited)"
+              : r.action.includes("fail")
+                ? "var(--st-cancelled)"
+                : "var(--accent)"
+          }
+        >
+          <div className="row wrap" style={{ gap: 6 }}>
+            <Badge color="var(--ink-3)" dot={false}>
+              {r.action}
+            </Badge>
+            {r.entityType && (
+              <span className="small muted">
+                {r.entityType}
+                {r.entityId ? ` #${r.entityId}` : ""}
               </span>
-              {r.entityType && (
-                <span className="small muted">
-                  {r.entityType}
-                  {r.entityId ? ` #${r.entityId}` : ""}
-                </span>
-              )}
-            </div>
-            <div className="small muted" style={{ marginTop: 2 }}>
-              {r.adminDisplayName || r.adminUsername} ·{" "}
-              {fmtDate(r.createdAt, true)}
-              {r.ipAddress ? ` · ${r.ipAddress}` : ""}
-            </div>
+            )}
           </div>
-        </div>
+          <div className="small muted" style={{ marginTop: 2 }}>
+            {r.adminDisplayName || r.adminUsername} ·{" "}
+            {fmtDate(r.createdAt, true)}
+            {r.ipAddress ? ` · ${r.ipAddress}` : ""}
+          </div>
+        </TimelineItem>
       ))}
     </div>
   );
@@ -359,14 +318,12 @@ function ActivityList({ rows }) {
 
 function UserActivityModal({ user, onClose }) {
   const [page, setPage] = useState(1);
-  const [data, setData] = useState(null);
-
-  useEffect(() => {
-    activityApi
-      .staff({ adminId: user.id, page: String(page) })
-      .then(setData)
-      .catch(() => setData({ rows: [], total: 0 }));
-  }, [user.id, page]);
+  const result = useApiData(
+    () => activityApi.staff({ adminId: user.id, page: String(page) }),
+    [user.id, page],
+  );
+  // A failed load shows as "no activity" rather than an error.
+  const data = result.error ? { rows: [], total: 0 } : result.data;
 
   return (
     <Modal
@@ -375,9 +332,7 @@ function UserActivityModal({ user, onClose }) {
       onClose={onClose}
     >
       {!data ? (
-        <div style={{ padding: 40 }}>
-          <Spinner />
-        </div>
+        <PageLoader padding={40} />
       ) : (
         <>
           <ActivityList rows={data.rows} />
@@ -390,23 +345,13 @@ function UserActivityModal({ user, onClose }) {
 
 function ActivityFeed() {
   const [page, setPage] = useState(1);
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    activityApi
-      .staff({ page: String(page) })
-      .then(setData)
-      .catch((e) => setError(e.message));
-  }, [page]);
+  const { data, error } = useApiData(
+    () => activityApi.staff({ page: String(page) }),
+    [page],
+  );
 
   if (error) return <Empty title="Couldn't load activity" hint={error} />;
-  if (!data)
-    return (
-      <div style={{ padding: 60 }}>
-        <Spinner />
-      </div>
-    );
+  if (!data) return <PageLoader />;
 
   return (
     <div className="card">

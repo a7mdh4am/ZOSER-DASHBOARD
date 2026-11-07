@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { IconExternal, IconUser } from "../components/Icons.jsx";
-import { Can, CopyButton } from "../components/ui.jsx";
+import { Can, CopyField } from "../components/ui.jsx";
 import { useToast } from "../context/ToastContext.jsx";
+import { useAction } from "../hooks/useAction.js";
 import { customersApi } from "../lib/api.js";
 
 /**
@@ -32,14 +33,11 @@ const BLANK = { username: "", password: "", name: "", friendsCount: 2 };
 function CreateAccountCard() {
   const toast = useToast();
   const [form, setForm] = useState(BLANK);
-  const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState(null); // {username, link}
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+  const [create, busy] = useAction(async () => {
     try {
       const res = await customersApi.create({
         username: form.username,
@@ -52,10 +50,8 @@ function CreateAccountCard() {
       toast("Account created");
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <div className="card">
@@ -63,7 +59,14 @@ function CreateAccountCard() {
         <IconUser />
         <h3>Create account</h3>
       </div>
-      <form className="card-body stack" style={{ gap: 14 }} onSubmit={submit}>
+      <form
+        className="card-body stack"
+        style={{ gap: 14 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          create();
+        }}
+      >
         <div className="grid-2" style={{ gap: 12 }}>
           <label className="field">
             <span>Username</span>
@@ -123,22 +126,7 @@ function CreateAccountCard() {
             <div className="small strong" style={{ color: "var(--good)" }}>
               Profile link for “{created.username}” — program this on the cards:
             </div>
-            <div
-              className="copy-line"
-              style={{
-                background: "var(--surface-2)",
-                borderRadius: 8,
-                padding: "8px 10px",
-              }}
-            >
-              <span
-                className="small mono grow"
-                style={{ overflowWrap: "anywhere" }}
-              >
-                {created.link}
-              </span>
-              <CopyButton text={created.link} label="profile link" />
-            </div>
+            <CopyField value={created.link} label="profile link" />
             <a
               className="btn sm"
               style={{ alignSelf: "flex-start" }}
@@ -160,15 +148,12 @@ function ResetPasswordCard() {
   const [username, setUsername] = useState("");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
-  const [busy, setBusy] = useState(false);
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const [reset, busy] = useAction(async () => {
     if (pw !== pw2) {
       toast("Passwords do not match", "err");
       return;
     }
-    setBusy(true);
     try {
       const lookup = await customersApi.lookup(username.trim());
       if (!lookup.found) throw new Error("No account with that username");
@@ -179,17 +164,22 @@ function ResetPasswordCard() {
       setPw2("");
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <div className="card">
       <div className="card-head">
         <h3>Reset password</h3>
       </div>
-      <form className="card-body stack" style={{ gap: 14 }} onSubmit={submit}>
+      <form
+        className="card-body stack"
+        style={{ gap: 14 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          reset();
+        }}
+      >
         <label className="field">
           <span>Username</span>
           <input
@@ -238,27 +228,29 @@ function LookupCard() {
   const toast = useToast();
   const [username, setUsername] = useState("");
   const [result, setResult] = useState(null);
-  const [busy, setBusy] = useState(false);
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+  const [find, busy] = useAction(async () => {
     setResult(null);
     try {
       setResult(await customersApi.lookup(username.trim()));
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <div className="card">
       <div className="card-head">
         <h3>Find a profile link</h3>
       </div>
-      <form className="card-body stack" style={{ gap: 12 }} onSubmit={submit}>
+      <form
+        className="card-body stack"
+        style={{ gap: 12 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          find();
+        }}
+      >
         <div className="row">
           <input
             className="input"
@@ -279,22 +271,7 @@ function LookupCard() {
         )}
         {result?.found &&
           (result.link ? (
-            <div
-              className="copy-line"
-              style={{
-                background: "var(--surface-2)",
-                borderRadius: 8,
-                padding: "8px 10px",
-              }}
-            >
-              <span
-                className="small mono grow"
-                style={{ overflowWrap: "anywhere" }}
-              >
-                {result.link}
-              </span>
-              <CopyButton text={result.link} label="profile link" />
-            </div>
+            <CopyField value={result.link} label="profile link" />
           ) : (
             <div className="small muted">
               Account found, but no profile is linked to it yet.

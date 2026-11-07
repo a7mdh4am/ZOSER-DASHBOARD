@@ -1,35 +1,41 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   IconChevronL,
-  IconDownload,
   IconExternal,
-  IconMusic,
   IconPlus,
   IconTruck,
   IconUser,
-  IconWhatsapp,
 } from "../components/Icons.jsx";
 import {
+  CustomizationFields,
+  OrderItemsGrid,
+  PhoneActions,
+} from "../components/order.jsx";
+import { ThemeChips } from "../components/ThemeChips.jsx";
+import {
+  Badge,
   Can,
   CopyButton,
+  CopyField,
   Empty,
   Modal,
-  Spinner,
+  PageLoader,
+  Segmented,
   StatusBadge,
+  TimelineItem,
 } from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { useAction } from "../hooks/useAction.js";
-import { geoApi, ordersApi, shipmentsApi, themesApi } from "../lib/api.js";
+import { useApiData } from "../hooks/useApiData.js";
+import { geoApi, ordersApi, shipmentsApi } from "../lib/api.js";
 import {
   colorHex,
   fmtDate,
-  fmtProductionDate,
   money2,
   statusOf,
   STATUS_ORDER,
-  waLink,
 } from "../lib/format.js";
 
 const SHIP_STATUS = {
@@ -42,34 +48,19 @@ const SHIP_STATUS = {
 export default function OrderDetail() {
   const { id } = useParams();
 
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
   const [shipModal, setShipModal] = useState(false);
 
-  const load = useCallback(
-    () =>
-      ordersApi
-        .get(id)
-        .then(setData)
-        .catch((e) => setError(e.message)),
-    [id],
-  );
-
-  // Another order: drop the previous one's data before fetching.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset + fetch when the order id changes
-    setData(null);
-    setError("");
-    load();
-  }, [load]);
+  const {
+    data: loaded,
+    error,
+    reload: load,
+  } = useApiData(() => ordersApi.get(id), [id]);
+  // After moving to another order, the previous one stays loaded until the
+  // new one arrives; show the spinner instead of the wrong order.
+  const data = loaded && String(loaded.order.id) === String(id) ? loaded : null;
 
   if (error) return <Empty title="Couldn't load this order" hint={error} />;
-  if (!data)
-    return (
-      <div style={{ padding: 60 }}>
-        <Spinner />
-      </div>
-    );
+  if (!data) return <PageLoader />;
 
   const {
     order,
@@ -169,11 +160,8 @@ export default function OrderDetail() {
 function PaymentCard({ order, financial, deposits, onChanged }) {
   const toast = useToast();
   const [amount, setAmount] = useState("");
-  const [busy, setBusy] = useState(false);
 
-  const addDeposit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+  const [addDeposit, busy] = useAction(async () => {
     try {
       await ordersApi.addDeposit(order.id, Number(amount));
       toast("Deposit recorded");
@@ -181,10 +169,8 @@ function PaymentCard({ order, financial, deposits, onChanged }) {
       onChanged();
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <div className="card">
@@ -241,7 +227,14 @@ function PaymentCard({ order, financial, deposits, onChanged }) {
         </div>
 
         <Can perm="finance.deposit.add">
-          <form className="row" style={{ marginTop: 14 }} onSubmit={addDeposit}>
+          <form
+            className="row"
+            style={{ marginTop: 14 }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              addDeposit();
+            }}
+          >
             <input
               className="input"
               type="number"
@@ -271,70 +264,7 @@ function ItemsCard({ items, extras }) {
         <h3>Cards & extras</h3>
       </div>
       <div className="card-body stack">
-        {items.length > 0 && (
-          <div className="items-grid">
-            {items.map((it, i) => (
-              <div className="item-cell" key={i}>
-                {it.full_image_url ? (
-                  <a href={it.full_image_url} target="_blank" rel="noreferrer">
-                    <img
-                      className="item-thumb"
-                      src={it.full_image_url}
-                      alt={it.name}
-                      loading="lazy"
-                    />
-                  </a>
-                ) : (
-                  <div
-                    className="item-thumb"
-                    style={{
-                      display: "grid",
-                      placeItems: "center",
-                      color: "var(--ink-3)",
-                    }}
-                  >
-                    No image
-                  </div>
-                )}
-                <div className="in">
-                  <span>
-                    {it.name}
-                    <CopyButton text={it.name} label={"Name"} />
-                  </span>
-                </div>
-                <div className="row" style={{ gap: 6, marginTop: 2 }}>
-                  {it.color && (
-                    <>
-                      <span
-                        className="color-dot"
-                        style={{
-                          background: colorHex(it.color) || "var(--surface-2)",
-                        }}
-                        title={it.color}
-                      />
-                      <span className="small muted">{it.color}</span>
-                    </>
-                  )}
-                  {it.full_image_url && (
-                    <a
-                      className="small"
-                      style={{
-                        color: "var(--accent)",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                      href={it.full_image_url}
-                      download
-                    >
-                      <IconDownload size={12} /> Download
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {items.length > 0 && <OrderItemsGrid items={items} />}
 
         {extras.length > 0 && (
           <div>
@@ -362,12 +292,6 @@ function ItemsCard({ items, extras }) {
 
 function CustomizationCard({ order, items, products, cardCount, onChanged }) {
   const [editing, setEditing] = useState(false);
-  const fields = [
-    ["Design", order.product_name],
-    ["Group name", order.group_name],
-    ["Anniversary date", order.date ? fmtProductionDate(order.date) : null],
-    ["Addr", order.addr],
-  ].filter(([, v]) => v);
 
   return (
     <div className="card">
@@ -394,43 +318,7 @@ function CustomizationCard({ order, items, products, cardCount, onChanged }) {
         />
       )}
       <div className="card-body stack">
-        <div className="kv">
-          {fields.map(([k, v]) => (
-            <div className="kv-item" key={k}>
-              <div className="k">{k}</div>
-              <div className="v copy-line">
-                {v}
-                <CopyButton text={v} label={k} />
-              </div>
-            </div>
-          ))}
-          {order.song && (
-            <div className="kv-item full">
-              <div className="k">Song</div>
-              <div className="v copy-line">
-                <IconMusic />
-                <a
-                  href={order.song}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: "var(--accent)", overflowWrap: "anywhere" }}
-                >
-                  {order.song}
-                </a>
-                <CopyButton text={order.song} label="song URL" />
-              </div>
-            </div>
-          )}
-          {order.notes && (
-            <div className="kv-item full">
-              <div className="k">Customer notes</div>
-              <div className="v copy-line" style={{ whiteSpace: "pre-wrap" }}>
-                {order.notes}
-                <CopyButton text={order.notes} label="notes" />
-              </div>
-            </div>
-          )}
-        </div>
+        <CustomizationFields order={order} showDesign />
       </div>
     </div>
   );
@@ -473,40 +361,31 @@ function NotesCard({ orderId, notes, onChanged }) {
         ) : (
           <div className="timeline">
             {notes.map((n, i) => (
-              <div className="tl-item" key={i}>
-                <div className="tl-rail">
-                  <div
-                    className="tl-dot"
-                    style={{ "--tl-c": "var(--st-production)" }}
-                  />
-                  <div className="tl-line" />
-                </div>
-                <div className="grow">
-                  <div style={{ whiteSpace: "pre-wrap" }}>{n.edits}</div>
-                  {n.images?.length > 0 && (
-                    <div className="row wrap" style={{ gap: 10, marginTop: 2 }}>
-                      {n.images.map((img, imgIdx) => (
-                        <a
-                          key={imgIdx}
-                          className="small"
-                          style={{ color: "var(--accent)" }}
-                          href={img.image_url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Attachment {n.images.length > 1 ? imgIdx + 1 : ""}{" "}
-                          <IconExternal size={11} />
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                  {n.created_at && (
-                    <div className="small muted">
-                      {fmtDate(n.created_at, true)}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <TimelineItem key={i} color="var(--st-production)">
+                <div style={{ whiteSpace: "pre-wrap" }}>{n.edits}</div>
+                {n.images?.length > 0 && (
+                  <div className="row wrap" style={{ gap: 10, marginTop: 2 }}>
+                    {n.images.map((img, imgIdx) => (
+                      <a
+                        key={imgIdx}
+                        className="small"
+                        style={{ color: "var(--accent)" }}
+                        href={img.image_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Attachment {n.images.length > 1 ? imgIdx + 1 : ""}{" "}
+                        <IconExternal size={11} />
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {n.created_at && (
+                  <div className="small muted">
+                    {fmtDate(n.created_at, true)}
+                  </div>
+                )}
+              </TimelineItem>
             ))}
           </div>
         )}
@@ -520,10 +399,8 @@ function NoteModal({ orderId, onClose, onDone }) {
   const toast = useToast();
   const [edits, setEdits] = useState("");
   const [files, setFiles] = useState([]);
-  const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
-    setBusy(true);
+  const [submit, busy] = useAction(async () => {
     try {
       const fd = new FormData();
       fd.append("edits", edits);
@@ -533,9 +410,8 @@ function NoteModal({ orderId, onClose, onDone }) {
       onDone();
     } catch (err) {
       toast(err.message, "err");
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <Modal
@@ -594,7 +470,16 @@ function StatusCard({ order, onChanged }) {
   const { can } = useAuth();
   const toast = useToast();
   const [value, setValue] = useState(String(order.status));
-  const [busy, setBusy] = useState(false);
+
+  const [save, busy] = useAction(async () => {
+    try {
+      await ordersApi.updateStatus(order.id, value);
+      toast(`Status updated to ${statusOf(value).label}`);
+      onChanged();
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
 
   // Node's flat permission model has no per-status target restriction —
   // orders.status.update allows setting any status.
@@ -602,19 +487,6 @@ function StatusCard({ order, onChanged }) {
   const options = can("orders.status.update") ? STATUS_ORDER : [cur];
   const canSetAny = options.some((s) => String(s) !== cur);
   if (!canSetAny) return null;
-
-  const save = async () => {
-    setBusy(true);
-    try {
-      await ordersApi.updateStatus(order.id, value);
-      toast(`Status updated to ${statusOf(value).label}`);
-      onChanged();
-    } catch (err) {
-      toast(err.message, "err");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <div className="card">
@@ -649,7 +521,6 @@ function StatusCard({ order, onChanged }) {
 
 function ProfileCard({ orderId, profile, onChanged }) {
   const toast = useToast();
-  const [busy, setBusy] = useState(false);
   // Shown straight after "Create profile", before the order has reloaded.
   const [createdLink, setCreatedLink] = useState(null);
   const link = profile.link || createdLink;
@@ -664,24 +535,7 @@ function ProfileCard({ orderId, profile, onChanged }) {
     setThemes(profile.themes || []);
   }
 
-  const [toggleTheme] = useAction(async (t) => {
-    try {
-      const res = await themesApi.assign({
-        username: profile.username,
-        themeId: t.theme_id,
-        action: t.status === "owned" ? "remove" : "assign",
-      });
-      toast(
-        t.status === "owned" ? `${t.theme} removed` : `${t.theme} assigned`,
-      );
-      setThemes(res.themes);
-    } catch (err) {
-      toast(err.message, "err");
-    }
-  });
-
-  const create = async () => {
-    setBusy(true);
+  const [create, busy] = useAction(async () => {
     try {
       const res = await ordersApi.createProfile(orderId);
       setCreatedLink(res.link);
@@ -690,10 +544,8 @@ function ProfileCard({ orderId, profile, onChanged }) {
       onChanged();
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <div className="card">
@@ -710,23 +562,11 @@ function ProfileCard({ orderId, profile, onChanged }) {
         </div>
         {link ? (
           <>
-            <div
-              className="copy-line"
-              style={{
-                background: "var(--surface-2)",
-                borderRadius: 8,
-                padding: "8px 10px",
-                width: "100%",
-              }}
-            >
-              <span
-                className="small mono grow"
-                style={{ overflowWrap: "anywhere" }}
-              >
-                {link}
-              </span>
-              <CopyButton text={link} label="profile link" />
-            </div>
+            <CopyField
+              value={link}
+              label="profile link"
+              style={{ width: "100%" }}
+            />
             {tempPassword && (
               <div
                 className="copy-line"
@@ -757,19 +597,12 @@ function ProfileCard({ orderId, profile, onChanged }) {
                   >
                     PROFILE THEMES — click to assign / remove
                   </div>
-                  <div className="row wrap" style={{ gap: 6 }}>
-                    {themes.map((t) => (
-                      <button
-                        key={t.theme_id}
-                        type="button"
-                        className={`chip${t.status === "owned" ? " active" : ""}`}
-                        onClick={() => toggleTheme(t)}
-                      >
-                        {t.status === "owned" ? "✓ " : ""}
-                        {t.theme}
-                      </button>
-                    ))}
-                  </div>
+                  <ThemeChips
+                    username={profile.username}
+                    themes={themes}
+                    onChange={setThemes}
+                    gap={6}
+                  />
                 </div>
               </Can>
             )}
@@ -829,18 +662,7 @@ function CustomerCard({ order, onChanged }) {
             <div className="k">Phone</div>
             <div className="v copy-line">
               {order.phone}
-              <CopyButton text={order.phone} label="phone" />
-              <a
-                className="copy-btn"
-                style={{ color: "var(--st-shipped)" }}
-                href={waLink(order.phone)}
-                target="_blank"
-                rel="noreferrer"
-                title="WhatsApp"
-                aria-label="Message on WhatsApp"
-              >
-                <IconWhatsapp />
-              </a>
+              <PhoneActions phone={order.phone} />
             </div>
           </div>
           <div className="kv-item">
@@ -862,27 +684,20 @@ function CustomerCard({ order, onChanged }) {
 /** Edit the customer's contact record (phone + shipping address). */
 function EditContactModal({ order, onClose, onDone }) {
   const toast = useToast();
-  const [cities, setCities] = useState([]);
+  // A failed load just leaves the city list empty.
+  const { data: geo } = useApiData(() => geoApi.cities(), []);
+  const cities = geo?.cities ?? [];
   const [form, setForm] = useState({
     phone: order.phone || "",
     address: order.address || "",
     cityId: order.city_id || "",
     zoneId: order.zone_id || "",
   });
-  const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-
-  useEffect(() => {
-    geoApi
-      .cities()
-      .then((d) => setCities(d.cities))
-      .catch(() => setCities([]));
-  }, []);
 
   const selectedCity = cities.find((c) => String(c.id) === String(form.cityId));
 
-  const submit = async () => {
-    setBusy(true);
+  const [submit, busy] = useAction(async () => {
     try {
       await ordersApi.updateCustomer(order.id, {
         phone: form.phone,
@@ -894,9 +709,8 @@ function EditContactModal({ order, onClose, onDone }) {
       onDone();
     } catch (err) {
       toast(err.message, "err");
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <Modal
@@ -1006,7 +820,6 @@ function EditDesignModal({
       color: it.color || "",
     })),
   );
-  const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const setCard = (idx, key, val) =>
     setCards((cs) => cs.map((c, i) => (i === idx ? { ...c, [key]: val } : c)));
@@ -1070,8 +883,7 @@ function EditDesignModal({
     }));
   };
 
-  const submit = async () => {
-    setBusy(true);
+  const [submit, busy] = useAction(async () => {
     try {
       await ordersApi.updateDesign(order.id, {
         productId: form.product_id ? Number(form.product_id) : undefined,
@@ -1087,9 +899,8 @@ function EditDesignModal({
       onDone();
     } catch (err) {
       toast(err.message, "err");
-      setBusy(false);
     }
-  };
+  });
 
   const noTier = form.product_id && tierPrice(form.product_id) == null;
 
@@ -1262,57 +1073,47 @@ function ShipmentList({ shipments, onChanged }) {
       {shipments.map((s) => {
         const st = SHIP_STATUS[s.status] ?? SHIP_STATUS.active;
         return (
-          <div className="tl-item" key={s.id}>
-            <div className="tl-rail">
-              <div className="tl-dot" style={{ "--tl-c": st.color }} />
-              <div className="tl-line" />
+          <TimelineItem key={s.id} color={st.color}>
+            <div className="row" style={{ gap: 8 }}>
+              <span className="mono strong">{s.tracking_no}</span>
+              <CopyButton text={s.tracking_no} label="tracking number" />
             </div>
-            <div className="grow">
-              <div className="row" style={{ gap: 8 }}>
-                <span className="mono strong">{s.tracking_no}</span>
-                <CopyButton text={s.tracking_no} label="tracking number" />
-              </div>
-              <div className="small muted" style={{ margin: "2px 0 6px" }}>
-                <span
-                  className="badge"
-                  style={{ "--badge-c": st.color, marginRight: 6 }}
-                >
-                  <span className="dot" />
-                  {st.label}
-                </span>
-                {s.carrier.toUpperCase()} · {fmtDate(s.created_at, true)}
-                {Number(s.cod_amount) > 0 && <> · COD {money2(s.cod_amount)}</>}
-              </div>
-              {s.notes && <div className="small muted">“{s.notes}”</div>}
-              {s.status === "active" && (
-                <Can perm="orders.shipment.status.update">
-                  <div className="row" style={{ gap: 6, marginTop: 4 }}>
-                    <button
-                      className="btn sm"
-                      disabled={busyId === s.id}
-                      onClick={() => setStatus(s.id, "delivered")}
-                    >
-                      Delivered
-                    </button>
-                    <button
-                      className="btn sm"
-                      disabled={busyId === s.id}
-                      onClick={() => setStatus(s.id, "returned")}
-                    >
-                      Returned
-                    </button>
-                    <button
-                      className="btn sm danger"
-                      disabled={busyId === s.id}
-                      onClick={() => setStatus(s.id, "cancelled")}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </Can>
-              )}
+            <div className="small muted" style={{ margin: "2px 0 6px" }}>
+              <Badge color={st.color} style={{ marginRight: 6 }}>
+                {st.label}
+              </Badge>
+              {s.carrier.toUpperCase()} · {fmtDate(s.created_at, true)}
+              {Number(s.cod_amount) > 0 && <> · COD {money2(s.cod_amount)}</>}
             </div>
-          </div>
+            {s.notes && <div className="small muted">“{s.notes}”</div>}
+            {s.status === "active" && (
+              <Can perm="orders.shipment.status.update">
+                <div className="row" style={{ gap: 6, marginTop: 4 }}>
+                  <button
+                    className="btn sm"
+                    disabled={busyId === s.id}
+                    onClick={() => setStatus(s.id, "delivered")}
+                  >
+                    Delivered
+                  </button>
+                  <button
+                    className="btn sm"
+                    disabled={busyId === s.id}
+                    onClick={() => setStatus(s.id, "returned")}
+                  >
+                    Returned
+                  </button>
+                  <button
+                    className="btn sm danger"
+                    disabled={busyId === s.id}
+                    onClick={() => setStatus(s.id, "cancelled")}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </Can>
+            )}
+          </TimelineItem>
         );
       })}
     </div>
@@ -1325,10 +1126,8 @@ function ShipmentModal({ orderId, defaultAmount, hasActive, onClose, onDone }) {
   const [tracking, setTracking] = useState("");
   const [amount, setAmount] = useState(String(defaultAmount.toFixed(2)));
   const [notesTxt, setNotesTxt] = useState("");
-  const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
-    setBusy(true);
+  const [submit, busy] = useAction(async () => {
     try {
       const res = await ordersApi.createShipment(orderId, {
         carrier,
@@ -1340,9 +1139,8 @@ function ShipmentModal({ orderId, defaultAmount, hasActive, onClose, onDone }) {
       onDone();
     } catch (err) {
       toast(err.message, "err");
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <Modal
@@ -1381,23 +1179,16 @@ function ShipmentModal({ orderId, defaultAmount, hasActive, onClose, onDone }) {
 
         <label className="field">
           <span>Courier</span>
-          <div className="seg" style={{ display: "flex" }}>
-            {[
+          <Segmented
+            fill
+            value={carrier}
+            onChange={setCarrier}
+            options={[
               ["jt", "J&T Express"],
               ["flash", "Flash Express"],
               ["manual", "Manual"],
-            ].map(([v, l]) => (
-              <button
-                key={v}
-                type="button"
-                className={carrier === v ? "active" : ""}
-                style={{ flex: 1 }}
-                onClick={() => setCarrier(v)}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
+            ]}
+          />
         </label>
 
         {/* No live Flash/J&T Express API integration yet (see docs) — every

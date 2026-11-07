@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useAction } from "../hooks/useAction.js";
 
 // Node's admin auth has no new-device email-OTP gate yet (see
 // _backend/README.md's admin auth scope notes) — this is a straight
@@ -9,24 +10,26 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const [signIn, busy] = useAction(async () => {
     setError("");
-    setBusy(true);
     try {
       await login(username.trim(), password);
       // AuthContext set the user and the app re-renders
     } catch (err) {
       setError(err.message || "Sign-in failed");
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <div className="login-page">
-      <form className="card login-card" onSubmit={submit}>
+      <form
+        className="card login-card"
+        onSubmit={(e) => {
+          e.preventDefault();
+          signIn();
+        }}
+      >
         <div className="brand">
           <img src="/images/logo.svg" alt="" />
           Zoser Admin

@@ -19,6 +19,11 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
     rules: {
+      // useApiData(load, deps) takes deps like useEffect; check them the same way.
+      "react-hooks/exhaustive-deps": [
+        "warn",
+        { additionalHooks: "(useApiData)" },
+      ],
       // The two context files export their provider and its hook together.
       "react-refresh/only-export-components": [
         "error",

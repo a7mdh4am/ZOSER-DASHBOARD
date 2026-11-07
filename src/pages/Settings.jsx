@@ -1,41 +1,24 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { IconUser } from "../components/Icons.jsx";
-import { Spinner } from "../components/ui.jsx";
+import { Badge, PageLoader, Spinner } from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useToast } from "../context/ToastContext.jsx";
 import { useAction } from "../hooks/useAction.js";
+import { useApiData } from "../hooks/useApiData.js";
 import { settingsApi } from "../lib/api.js";
 import { fmtDate } from "../lib/format.js";
 
 /** Own-account settings — available to every staff role. */
 export default function Settings() {
-  const [me, setMe] = useState(null);
-  const [error, setError] = useState("");
-  const [sessions, setSessions] = useState(null);
+  // Both load at once: the devices list doesn't wait for the profile.
+  const profile = useApiData(() => settingsApi.me(), []);
+  const devices = useApiData(() => settingsApi.sessions(), []);
+  const me = profile.data?.user;
+  // A failed devices load shows as an empty list.
+  const sessions = devices.error ? [] : (devices.data?.sessions ?? null);
 
-  const load = () =>
-    settingsApi
-      .me()
-      .then((d) => setMe(d.user))
-      .catch((e) => setError(e.message));
-  const loadSessions = () =>
-    settingsApi
-      .sessions()
-      .then((d) => setSessions(d.sessions))
-      .catch(() => setSessions([]));
-  // Both at once: the devices list doesn't need to wait for the profile.
-  useEffect(() => {
-    load();
-    loadSessions();
-  }, []);
-
-  if (error) return <div className="empty">{error}</div>;
-  if (!me)
-    return (
-      <div style={{ padding: 60 }}>
-        <Spinner />
-      </div>
-    );
+  if (profile.error) return <div className="empty">{profile.error}</div>;
+  if (!me) return <PageLoader />;
 
   return (
     <div className="stack" style={{ maxWidth: 720 }}>
@@ -59,10 +42,10 @@ export default function Settings() {
       </div>
 
       {/* Keyed by the saved name: after saving, the field starts from it again. */}
-      <ProfileCard key={me.display_name} me={me} onChanged={load} />
+      <ProfileCard key={me.display_name} me={me} onChanged={profile.reload} />
       <PasswordCard />
-      <EmailCard me={me} onChanged={load} />
-      <SessionsCard sessions={sessions} onChanged={loadSessions} />
+      <EmailCard me={me} onChanged={profile.reload} />
+      <SessionsCard sessions={sessions} onChanged={devices.reload} />
     </div>
   );
 }
@@ -102,12 +85,9 @@ function SessionsCard({ sessions, onChanged }) {
                   <div className="strong">
                     {s.ip || "unknown IP"}{" "}
                     {s.current && (
-                      <span
-                        className="badge"
-                        style={{ "--badge-c": "var(--st-paid)" }}
-                      >
+                      <Badge color="var(--st-paid)" dot={false}>
                         this device
-                      </span>
+                      </Badge>
                     )}
                   </div>
                   <div
@@ -139,11 +119,8 @@ function ProfileCard({ me, onChanged }) {
   const toast = useToast();
   const { refreshUser } = useAuth();
   const [name, setName] = useState(me.display_name || "");
-  const [busy, setBusy] = useState(false);
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+  const [save, busy] = useAction(async () => {
     try {
       const res = await settingsApi.updateProfile(name.trim());
       toast("Profile updated");
@@ -153,10 +130,8 @@ function ProfileCard({ me, onChanged }) {
       onChanged();
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <div className="card">
@@ -166,7 +141,10 @@ function ProfileCard({ me, onChanged }) {
       </div>
       <form
         className="card-body row"
-        onSubmit={submit}
+        onSubmit={(e) => {
+          e.preventDefault();
+          save();
+        }}
         style={{ alignItems: "flex-end" }}
       >
         <label className="field grow">
@@ -193,25 +171,20 @@ function ProfileCard({ me, onChanged }) {
 function PasswordCard() {
   const toast = useToast();
   const [form, setForm] = useState({ current: "", next: "", confirm: "" });
-  const [busy, setBusy] = useState(false);
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const [change, busy] = useAction(async () => {
     if (form.next !== form.confirm) {
       toast("New passwords do not match", "err");
       return;
     }
-    setBusy(true);
     try {
       await settingsApi.changePassword(form.current, form.next);
       toast("Password changed");
       setForm({ current: "", next: "", confirm: "" });
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -220,7 +193,14 @@ function PasswordCard() {
       <div className="card-head">
         <h3>Password</h3>
       </div>
-      <form className="card-body stack" style={{ gap: 14 }} onSubmit={submit}>
+      <form
+        className="card-body stack"
+        style={{ gap: 14 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          change();
+        }}
+      >
         <label className="field">
           <span>Current password</span>
           <input
@@ -277,28 +257,21 @@ function EmailCard({ me, onChanged }) {
   const [code, setCode] = useState("");
   const [step, setStep] = useState("form"); // form | verify
   const [notice, setNotice] = useState("");
-  const [busy, setBusy] = useState(false);
 
   // Node's admin accounts always have an email (unlike PHP's optional-until-set
   // model), so there's no "first email applies instantly" branch — every
   // change sends a confirmation code to the current address first.
-  const request = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+  const [request, requesting] = useAction(async () => {
     try {
       await settingsApi.requestEmailChange(newEmail.trim(), password);
       setNotice(`We sent a 6-digit code to ${me.email}.`);
       setStep("verify");
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
-  const confirm = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+  const [confirm, confirming] = useAction(async () => {
     try {
       await settingsApi.confirmEmailChange(newEmail.trim(), code.trim());
       toast("Email updated");
@@ -309,10 +282,8 @@ function EmailCard({ me, onChanged }) {
       onChanged();
     } catch (err) {
       toast(err.message, "err");
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <div className="card">
@@ -325,7 +296,10 @@ function EmailCard({ me, onChanged }) {
         <form
           className="card-body stack"
           style={{ gap: 14 }}
-          onSubmit={request}
+          onSubmit={(e) => {
+            e.preventDefault();
+            request();
+          }}
         >
           {me.email ? (
             <div className="small muted">
@@ -364,16 +338,23 @@ function EmailCard({ me, onChanged }) {
           <button
             className="btn primary"
             style={{ alignSelf: "flex-start" }}
-            disabled={busy}
+            disabled={requesting}
           >
-            {busy ? "…" : me.email ? "Send verification code" : "Save email"}
+            {requesting
+              ? "…"
+              : me.email
+                ? "Send verification code"
+                : "Save email"}
           </button>
         </form>
       ) : (
         <form
           className="card-body stack"
           style={{ gap: 14 }}
-          onSubmit={confirm}
+          onSubmit={(e) => {
+            e.preventDefault();
+            confirm();
+          }}
         >
           <div
             className="small"
@@ -405,9 +386,9 @@ function EmailCard({ me, onChanged }) {
             />
             <button
               className="btn primary"
-              disabled={busy || code.length !== 6}
+              disabled={confirming || code.length !== 6}
             >
-              {busy ? "…" : "Confirm"}
+              {confirming ? "…" : "Confirm"}
             </button>
             <button
               type="button"
