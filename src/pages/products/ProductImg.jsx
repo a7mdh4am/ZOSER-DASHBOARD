@@ -20,6 +20,8 @@ export function ProductImg({ url, size = 64 }) {
     <img
       src={url}
       alt=""
+      loading="lazy"
+      decoding="async"
       className="item-thumb"
       style={{ width: size, height: size, aspectRatio: "auto" }}
     />

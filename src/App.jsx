@@ -1,23 +1,108 @@
+import { lazy, useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
 import { Spinner } from "./components/ui.jsx";
 import { useAuth } from "./context/auth.js";
-import Coupons from "./pages/Coupons.jsx";
-import Customers from "./pages/Customers.jsx";
-import Dashboard from "./pages/Dashboard.jsx";
-import Designer from "./pages/Designer.jsx";
-import Finance from "./pages/finance/index.jsx";
 import Login from "./pages/Login.jsx";
-import OrderDetail from "./pages/order-detail/index.jsx";
-import Orders from "./pages/Orders.jsx";
-import Products from "./pages/products/index.jsx";
-import Roles from "./pages/Roles.jsx";
-import Settings from "./pages/Settings.jsx";
-import Team from "./pages/Team.jsx";
-import Themes from "./pages/Themes.jsx";
+
+// Each page's code is downloaded the first time it's opened, so the first
+// screen only waits for what it shows. (Sign-in stays in the main bundle: it's
+// what signed-out visitors see first.) Layout shows a spinner meanwhile.
+
+// Pages already downloaded (opened before, preloaded or prefetched).
+const loadedPages = {};
+const pageLoaders = Object.fromEntries(
+  Object.entries({
+    Coupons: () => import("./pages/Coupons.jsx"),
+    Customers: () => import("./pages/Customers.jsx"),
+    Dashboard: () => import("./pages/Dashboard.jsx"),
+    Designer: () => import("./pages/Designer.jsx"),
+    Finance: () => import("./pages/finance/index.jsx"),
+    OrderDetail: () => import("./pages/order-detail/index.jsx"),
+    Orders: () => import("./pages/Orders.jsx"),
+    Products: () => import("./pages/products/index.jsx"),
+    Roles: () => import("./pages/Roles.jsx"),
+    Settings: () => import("./pages/Settings.jsx"),
+    Team: () => import("./pages/Team.jsx"),
+    Themes: () => import("./pages/Themes.jsx"),
+  }).map(([name, load]) => [
+    name,
+    () =>
+      load().then((module) => {
+        loadedPages[name] = module.default;
+        return module;
+      }),
+  ]),
+);
+
+// Start downloading the page being opened right away, alongside the sign-in
+// check, rather than after it.
+const PAGE_FOR_PATH = [
+  ["/orders/", "OrderDetail"],
+  ["/orders", "Orders"],
+  ["/designer", "Designer"],
+  ["/customers", "Customers"],
+  ["/themes", "Themes"],
+  ["/products", "Products"],
+  ["/coupons", "Coupons"],
+  ["/finance", "Finance"],
+  ["/team", "Team"],
+  ["/roles", "Roles"],
+  ["/settings", "Settings"],
+];
+const openingPage =
+  window.location.pathname === "/"
+    ? "Dashboard"
+    : PAGE_FOR_PATH.find(([path]) =>
+        window.location.pathname.startsWith(path),
+      )?.[1];
+if (openingPage) pageLoaders[openingPage]().catch(() => {});
+
+/**
+ * A route's page. React.lazy suspends at least once even when the code is
+ * already here, which flashes the loading spinner and holds the page back for
+ * a moment; a page that has been downloaded renders straight away instead.
+ */
+function lazyPage(name) {
+  const Lazy = lazy(pageLoaders[name]);
+  return function Page() {
+    const [Component] = useState(() => loadedPages[name] ?? Lazy);
+    return <Component />;
+  };
+}
+
+const Coupons = lazyPage("Coupons");
+const Customers = lazyPage("Customers");
+const Dashboard = lazyPage("Dashboard");
+const Designer = lazyPage("Designer");
+const Finance = lazyPage("Finance");
+const OrderDetail = lazyPage("OrderDetail");
+const Orders = lazyPage("Orders");
+const Products = lazyPage("Products");
+const Roles = lazyPage("Roles");
+const Settings = lazyPage("Settings");
+const Team = lazyPage("Team");
+const Themes = lazyPage("Themes");
+
+// Once signed in and the browser is idle, fetch the other pages in the
+// background, so opening one later doesn't wait on the network.
+function usePrefetchPages(signedIn) {
+  useEffect(() => {
+    if (!signedIn) return;
+    const prefetch = () =>
+      Object.values(pageLoaders).forEach((load) => load().catch(() => {}));
+    if ("requestIdleCallback" in window) {
+      const id = requestIdleCallback(prefetch, { timeout: 4000 });
+      return () => cancelIdleCallback(id);
+    }
+    const id = setTimeout(prefetch, 2000); // Safari has no requestIdleCallback
+    return () => clearTimeout(id);
+  }, [signedIn]);
+}
 
 export default function App() {
   const { user, ready, can } = useAuth();
+  usePrefetchPages(Boolean(user));
 
   if (!ready) {
     return (

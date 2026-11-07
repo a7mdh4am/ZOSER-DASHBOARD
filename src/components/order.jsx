@@ -21,6 +21,7 @@ export function OrderItemsGrid({ items, nameClassName }) {
                 src={it.full_image_url}
                 alt={it.name}
                 loading="lazy"
+                decoding="async"
               />
             </a>
           ) : (

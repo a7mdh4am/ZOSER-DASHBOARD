@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/auth.js";
+import { PageLoader } from "./ui.jsx";
 import {
   IconBox,
   IconBrush,
@@ -185,7 +186,9 @@ export default function Layout() {
           </button>
         </div>
         <div className="content">
-          <Outlet />
+          <Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </Suspense>
         </div>
       </div>
     </div>
