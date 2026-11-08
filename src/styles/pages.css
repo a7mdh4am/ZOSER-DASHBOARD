@@ -117,7 +117,7 @@
 .item-thumb {
   width: 100%;
   aspect-ratio: 1;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 10px;
   border: 1px solid var(--hairline);
   background: var(--surface-2);
