@@ -147,28 +147,30 @@ export function OverviewTab({ filters, onOptions }) {
               <div className="card-head">
                 <h3>Revenue</h3>
                 <div className="grow" />
-                <Segmented
-                  label="Group by"
-                  value={granularity}
-                  onChange={setGranularity}
-                  options={[
-                    ["day", "Day"],
-                    ["week", "Week"],
-                    ["month", "Month"],
-                    ["year", "Year"],
-                  ]}
-                />
-                <Segmented
-                  label="Metric"
-                  value={metric}
-                  onChange={setMetric}
-                  options={[
-                    ["net", "Net"],
-                    ["gross", "Gross"],
-                    ["orders", "Orders"],
-                    ["discounts", "Discounts"],
-                  ]}
-                />
+                <div className="card-tools">
+                  <Segmented
+                    label="Group by"
+                    value={granularity}
+                    onChange={setGranularity}
+                    options={[
+                      ["day", "Day"],
+                      ["week", "Week"],
+                      ["month", "Month"],
+                      ["year", "Year"],
+                    ]}
+                  />
+                  <Segmented
+                    label="Metric"
+                    value={metric}
+                    onChange={setMetric}
+                    options={[
+                      ["net", "Net"],
+                      ["gross", "Gross"],
+                      ["orders", "Orders"],
+                      ["discounts", "Discounts"],
+                    ]}
+                  />
+                </div>
                 <button
                   className="btn ghost icon"
                   onClick={hook.reload}

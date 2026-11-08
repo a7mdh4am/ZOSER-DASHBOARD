@@ -148,6 +148,13 @@ label.field > span {
   padding: 16px;
 }
 
+/* A header's filters and toggles, kept together. */
+.card .card-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 /* A small heading over a group of fields or pictures. */
 .section-label {
   font-size: 12px;
