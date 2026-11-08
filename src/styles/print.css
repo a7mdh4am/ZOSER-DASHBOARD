@@ -1,0 +1,31 @@
+/* ---------- print (PDF export = browser print) ---------- */
+@media print {
+  .sidebar,
+  .topbar,
+  .no-print,
+  .chips,
+  .pager button,
+  .toasts {
+    display: none !important;
+  }
+
+  .content {
+    padding: 0;
+    max-width: none;
+  }
+
+  .card,
+  .stat {
+    box-shadow: none;
+    break-inside: avoid;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  :root,
+  [data-theme="dark"] {
+    color-scheme: light;
+  }
+}

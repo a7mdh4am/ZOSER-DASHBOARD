@@ -1,0 +1,98 @@
+/* ---------- mobile ---------- */
+.menu-btn {
+  display: none;
+}
+
+.scrim {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    height: 100dvh;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: none;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: var(--scrim);
+    z-index: 35;
+    animation: fade 0.15s;
+  }
+
+  .menu-btn {
+    display: inline-flex;
+  }
+
+  .content {
+    padding: 14px 14px 90px;
+  }
+
+  .topbar {
+    padding: 10px 14px;
+  }
+
+  /* minmax(0, …): a wide table scrolls inside its card instead of
+     stretching the column, and the page, past the screen. */
+  .grid-2,
+  .grid-3-2,
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* A header's controls get a line of their own under the title, the
+     toggles sharing it at full width. */
+  .card .card-head:has(> .card-tools) {
+    flex-wrap: wrap;
+  }
+
+  .card .card-tools {
+    order: 1;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .card .card-tools .seg {
+    flex: 1 1 auto;
+  }
+
+  .card .card-tools .seg button {
+    flex: 1;
+  }
+
+  .kv {
+    grid-template-columns: 1fr;
+  }
+
+  .modal {
+    max-width: none;
+    align-self: flex-end;
+    border-radius: 16px 16px 0 0;
+    max-height: 92dvh;
+  }
+
+  .overlay {
+    padding: 0;
+    align-items: end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

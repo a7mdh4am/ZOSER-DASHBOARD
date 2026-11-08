@@ -2,10 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <meta name="theme-color" content="#0f1115" />
     <link rel="icon" href="/images/favicon.svg" />
     <title>Zoser Admin</title>
+    <script>
+      // Apply the saved light/dark choice (or the OS setting) before the first
+      // paint, so the loading screen and sign-in page don't flash light for
+      // dark-mode users. Layout keeps it in sync after that.
+      (function () {
+        var saved = null;
+        try {
+          saved = localStorage.getItem("zoser-theme");
+        } catch (e) {
+          /* storage blocked */
+        }
+        var dark =
+          saved === "dark" ||
+          (saved !== "light" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

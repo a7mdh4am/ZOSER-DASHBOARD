@@ -1,0 +1,72 @@
+/* Colors, radii, shadows and fonts. Light by default; [data-theme="dark"] on
+   <html> switches to dark. */
+
+:root {
+  /* surfaces & ink (light) */
+  --page: #faecdf;
+  --surface: #fbf1e7;
+  --surface-2: #f4e4d4;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-3: #898781;
+  --hairline: rgba(11, 11, 11, 0.1);
+  --grid: #e1e0d9;
+  --accent: #e9979a;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(250, 197, 199, 0.22);
+  --danger: #d03b3b;
+  --danger-soft: rgba(208, 59, 59, 0.1);
+  --good: #006300;
+  --good-soft: rgba(12, 163, 12, 0.12);
+  --warn-soft: rgba(250, 178, 25, 0.16);
+  /* the same in both themes */
+  --danger-ink: #ffffff; /* text on solid red: error toast, remove-picture button */
+  --toast-tick: #7ce27c; /* the success tick on the (inverted) toast */
+  --overlay: rgba(0, 0, 0, 0.45); /* behind popups */
+  --scrim: rgba(0, 0, 0, 0.4); /* behind the mobile menu */
+
+  /* order-status series (categorical slots, fixed mapping) */
+  --st-pending: #eda100;
+  --st-shipped: #2a78d6;
+  --st-production: #4a3aa7;
+  --st-deposited: #1baf7a;
+  --st-paid: #008300;
+  --st-cancelled: #e34948;
+
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow: 0 1px 2px rgba(11, 11, 11, 0.05), 0 4px 16px rgba(11, 11, 11, 0.06);
+  --shadow-lg: 0 8px 40px rgba(11, 11, 11, 0.18);
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sidebar-w: 232px;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #242422;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-3: #898781;
+  --hairline: rgba(255, 255, 255, 0.1);
+  --grid: #2c2c2a;
+  --accent: #3987e5;
+  --accent-soft: rgba(57, 135, 229, 0.18);
+  --danger: #e66767;
+  --danger-soft: rgba(230, 103, 103, 0.14);
+  --good: #0ca30c;
+  --good-soft: rgba(12, 163, 12, 0.16);
+
+  --st-pending: #c98500;
+  --st-shipped: #3987e5;
+  --st-production: #a855f7;
+  /* violet stepped for dark; ΔE 8.8 vs blue — always label-paired */
+  --st-deposited: #199e70;
+  --st-paid: #008300;
+  --st-cancelled: #e66767;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}

@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  ChipGroup,
   Empty,
+  OrderLink,
+  PageLoader,
   Pager,
   SearchInput,
-  Spinner,
   StatusBadge,
 } from "../components/ui.jsx";
+import { useApiData } from "../hooks/useApiData.js";
 import { ordersApi } from "../lib/api.js";
 import {
   fmtDate,
@@ -28,32 +30,24 @@ export default function Orders() {
   const search = params.get("q") ?? "";
   const page = Math.max(1, Number(params.get("page")) || 1);
 
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const setParam = (patch) => {
-    const next = new URLSearchParams(params);
-    Object.entries(patch).forEach(([k, v]) =>
-      v ? next.set(k, v) : next.delete(k),
+  const setParam = (patch) =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        Object.entries(patch).forEach(([k, v]) =>
+          v ? next.set(k, v) : next.delete(k),
+        );
+        if (!("page" in patch)) next.delete("page");
+        return next;
+      },
+      { replace: true },
     );
-    if (!("page" in patch)) next.delete("page");
-    setParams(next, { replace: true });
-  };
 
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    setError("");
-    ordersApi
-      .list({ status, search, page: String(page), per_page: "25" })
-      .then((d) => alive && setData(d))
-      .catch((e) => alive && setError(e.message))
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, [status, search, page]);
+  const { data, error, loading } = useApiData(
+    () =>
+      ordersApi.list({ status, search, page: String(page), per_page: "25" }),
+    [status, search, page],
+  );
 
   return (
     <div className="stack">
@@ -67,29 +61,19 @@ export default function Orders() {
         </div>
       </div>
 
-      <div className="chips" role="tablist" aria-label="Status filter">
-        <button
-          className={`chip${status === "" ? " active" : ""}`}
-          onClick={() => setParam({ status: "" })}
-        >
-          All
-        </button>
-        {visibleStatuses.map((s) => (
-          <button
-            key={s}
-            className={`chip${status === s ? " active" : ""}`}
-            onClick={() => setParam({ status: s })}
-          >
-            {statusOf(s).label}
-          </button>
-        ))}
-      </div>
+      <ChipGroup
+        label="Status filter"
+        value={status}
+        onChange={(s) => setParam({ status: s })}
+        options={[
+          ["", "All"],
+          ...visibleStatuses.map((s) => [s, statusOf(s).label]),
+        ]}
+      />
 
       <div className="card">
         {loading && !data ? (
-          <div style={{ padding: 60 }}>
-            <Spinner />
-          </div>
+          <PageLoader />
         ) : error ? (
           <Empty title="Couldn't load orders" hint={error} />
         ) : !data.orders.length ? (
@@ -119,8 +103,11 @@ export default function Orders() {
                 </thead>
                 <tbody>
                   {data.orders.map((o) => {
-                    const net = Number(o.price) - Number(o.discount_amount);
+                    // What the customer pays: subtotal − discount + shipping,
+                    // the same total as the order page and the shop's cart.
+                    const total = Number(o.grand_total);
                     const paid = Number(o.total_deposit);
+                    const fullyPaid = paid >= total && total > 0;
                     return (
                       <tr
                         key={o.id}
@@ -128,7 +115,9 @@ export default function Orders() {
                         onClick={() => navigate(`/orders/${o.id}`)}
                       >
                         <td>
-                          <div className="strong">#{o.id}</div>
+                          <div className="strong">
+                            <OrderLink id={o.id} />
+                          </div>
                           <div
                             className="small muted"
                             title={fmtDate(o.order_time, true)}
@@ -155,17 +144,15 @@ export default function Orders() {
                         </td>
                         <td className="num">
                           <span
-                            className={paid >= net && net > 0 ? "strong" : ""}
+                            className={fullyPaid ? "strong" : ""}
                             style={
-                              paid >= net && net > 0
-                                ? { color: "var(--good)" }
-                                : undefined
+                              fullyPaid ? { color: "var(--good)" } : undefined
                             }
                           >
                             {paid > 0 ? money(paid) : "—"}
                           </span>
                         </td>
-                        <td className="num strong">{money(net)}</td>
+                        <td className="num strong">{money(total)}</td>
                       </tr>
                     );
                   })}
@@ -176,7 +163,7 @@ export default function Orders() {
               page={page}
               perPage={data.per_page}
               total={data.total}
-              onPage={(p) => setParam({ page: String(p), q: search, status })}
+              onPage={(p) => setParam({ page: String(p) })}
             />
           </>
         )}

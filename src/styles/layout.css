@@ -1,0 +1,142 @@
+/* ---------- app shell ---------- */
+.shell {
+  display: flex;
+  min-height: 100%;
+}
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--hairline);
+  z-index: 40;
+}
+
+.sidebar .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 16px;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.sidebar .brand img {
+  height: 26px;
+  width: auto;
+}
+
+[data-theme="dark"] .brand img {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.nav-link svg {
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+
+.nav-link:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.nav-link.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.sidebar .spacer {
+  flex: 1;
+}
+
+.sidebar .user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--hairline);
+  margin-top: 8px;
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+
+.user-chip .who {
+  min-width: 0;
+}
+
+.user-chip .who .name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-chip .who .role {
+  font-size: 12px;
+  color: var(--ink-3);
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 24px;
+  background: color-mix(in srgb, var(--page) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--hairline);
+  min-height: 52px;
+}
+
+.topbar h1 {
+  font-size: 17px;
+}
+
+.content {
+  padding: 20px 24px 80px;
+  max-width: 1240px;
+  width: 100%;
+  margin: 0 auto;
+}

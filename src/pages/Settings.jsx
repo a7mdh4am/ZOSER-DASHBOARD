@@ -1,31 +1,39 @@
-import { useEffect, useState } from 'react';
-import { IconUser } from '../components/Icons.jsx';
-import { Spinner } from '../components/ui.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
-import { useToast } from '../context/ToastContext.jsx';
-import { settingsApi } from '../lib/api.js';
-import { fmtDate } from '../lib/format.js';
+import { useState } from "react";
+import { IconUser } from "../components/Icons.jsx";
+import { Badge, PageLoader, Spinner } from "../components/ui.jsx";
+import { useAuth } from "../context/auth.js";
+import { useToast } from "../context/toast.js";
+import { useAction } from "../hooks/useAction.js";
+import { useApiData } from "../hooks/useApiData.js";
+import { settingsApi } from "../lib/api.js";
+import { fmtDate } from "../lib/format.js";
 
 /** Own-account settings — available to every staff role. */
 export default function Settings() {
-  const [me, setMe] = useState(null);
-  const [error, setError] = useState('');
+  // Both load at once: the devices list doesn't wait for the profile.
+  const profile = useApiData(() => settingsApi.me(), []);
+  const devices = useApiData(() => settingsApi.sessions(), []);
+  const me = profile.data?.user;
+  // A failed devices load shows as an empty list.
+  const sessions = devices.error ? [] : (devices.data?.sessions ?? null);
 
-  const load = () => settingsApi.me().then((d) => setMe(d.user)).catch((e) => setError(e.message));
-  useEffect(() => { load(); }, []);
-
-  if (error) return <div className="empty">{error}</div>;
-  if (!me) return <div style={{ padding: 60 }}><Spinner /></div>;
+  if (profile.error) return <div className="empty">{profile.error}</div>;
+  if (!me) return <PageLoader />;
 
   return (
     <div className="stack" style={{ maxWidth: 720 }}>
       <div className="card">
-        <div className="card-body row" style={{ gap: 14 }}>
-          <div className="avatar" style={{ width: 44, height: 44, fontSize: 17 }}>
+        <div className="card-body row gap-14">
+          <div
+            className="avatar"
+            style={{ width: 44, height: 44, fontSize: 17 }}
+          >
             {(me.display_name || me.username).slice(0, 2)}
           </div>
           <div className="grow">
-            <div className="strong" style={{ fontSize: 16 }}>{me.display_name || me.username}</div>
+            <div className="strong" style={{ fontSize: 16 }}>
+              {me.display_name || me.username}
+            </div>
             <div className="small muted">
               @{me.username} · {me.admin_roles.name}
             </div>
@@ -33,55 +41,67 @@ export default function Settings() {
         </div>
       </div>
 
-      <ProfileCard me={me} onChanged={load} />
+      {/* Keyed by the saved name: after saving, the field starts from it again. */}
+      <ProfileCard key={me.display_name} me={me} onChanged={profile.reload} />
       <PasswordCard />
-      <EmailCard me={me} onChanged={load} />
-      <SessionsCard />
+      <EmailCard me={me} onChanged={profile.reload} />
+      <SessionsCard sessions={sessions} onChanged={devices.reload} />
     </div>
   );
 }
 
-function SessionsCard() {
+function SessionsCard({ sessions, onChanged }) {
   const toast = useToast();
-  const [sessions, setSessions] = useState(null);
 
-  const load = () => settingsApi.sessions().then((d) => setSessions(d.sessions)).catch(() => setSessions([]));
-  useEffect(() => { load(); }, []);
-
-  const revoke = async (s) => {
+  const [revoke] = useAction(async (s) => {
     try {
       await settingsApi.revokeSession(s.id);
-      toast(s.current ? 'Signed out this device' : 'Device signed out');
-      if (s.current) { window.location.reload(); return; }
-      load();
+      toast(s.current ? "Signed out this device" : "Device signed out");
+      if (s.current) {
+        window.location.reload();
+        return;
+      }
+      await onChanged();
     } catch (err) {
-      toast(err.message, 'err');
+      toast(err.message, "err");
     }
-  };
+  });
 
   return (
     <div className="card">
-      <div className="card-head"><h3>Active devices</h3></div>
+      <div className="card-head">
+        <h3>Active devices</h3>
+      </div>
       <div className="card-body">
-        {!sessions ? <Spinner /> : sessions.length === 0 ? (
+        {!sessions ? (
+          <Spinner />
+        ) : sessions.length === 0 ? (
           <div className="small muted">No active sessions.</div>
         ) : (
-          <div className="stack" style={{ gap: 10 }}>
+          <div className="stack gap-10">
             {sessions.map((s) => (
-              <div key={s.id} className="row" style={{ gap: 10 }}>
+              <div key={s.id} className="row">
                 <div className="grow">
                   <div className="strong">
-                    {s.ip || 'unknown IP'} {s.current && <span className="badge" style={{ '--badge-c': 'var(--st-paid)' }}>this device</span>}
+                    {s.ip || "unknown IP"}{" "}
+                    {s.current && (
+                      <Badge color="var(--st-paid)" dot={false}>
+                        this device
+                      </Badge>
+                    )}
                   </div>
-                  <div className="small muted" style={{ overflowWrap: 'anywhere' }}>
-                    {s.user_agent || 'unknown browser'}
+                  <div className="small muted break-anywhere">
+                    {s.user_agent || "unknown browser"}
                   </div>
                   <div className="small muted">
-                    started {fmtDate(s.created_at, true)}{s.last_seen_at ? ` · last seen ${fmtDate(s.last_seen_at, true)}` : ''}
+                    started {fmtDate(s.created_at, true)}
+                    {s.last_seen_at
+                      ? ` · last seen ${fmtDate(s.last_seen_at, true)}`
+                      : ""}
                   </div>
                 </div>
                 <button className="btn sm danger" onClick={() => revoke(s)}>
-                  {s.current ? 'Sign out' : 'Revoke'}
+                  {s.current ? "Sign out" : "Revoke"}
                 </button>
               </div>
             ))}
@@ -95,36 +115,50 @@ function SessionsCard() {
 function ProfileCard({ me, onChanged }) {
   const toast = useToast();
   const { refreshUser } = useAuth();
-  const [name, setName] = useState(me.display_name || '');
-  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState(me.display_name || "");
 
-  useEffect(() => setName(me.display_name || ''), [me.display_name]);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+  const [save, busy] = useAction(async () => {
     try {
       const res = await settingsApi.updateProfile(name.trim());
-      toast('Profile updated');
-      refreshUser?.(res.user);
+      toast("Profile updated");
+      // The sidebar reads the signed-in user's `displayName`; this endpoint
+      // answers with `display_name`.
+      refreshUser({ displayName: res.user.display_name });
       onChanged();
     } catch (err) {
-      toast(err.message, 'err');
-    } finally {
-      setBusy(false);
+      toast(err.message, "err");
     }
-  };
+  });
 
   return (
     <div className="card">
-      <div className="card-head"><IconUser /><h3>Profile</h3></div>
-      <form className="card-body row" onSubmit={submit} style={{ alignItems: 'flex-end' }}>
+      <div className="card-head">
+        <IconUser />
+        <h3>Profile</h3>
+      </div>
+      <form
+        className="card-body row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save();
+        }}
+        style={{ alignItems: "flex-end" }}
+      >
         <label className="field grow">
           <span>Display name</span>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={50} required />
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={50}
+            required
+          />
         </label>
-        <button className="btn primary" disabled={busy || name.trim() === (me.display_name || '')}>
-          {busy ? 'Saving…' : 'Save'}
+        <button
+          className="btn primary"
+          disabled={busy || name.trim() === (me.display_name || "")}
+        >
+          {busy ? "Saving…" : "Save"}
         </button>
       </form>
     </div>
@@ -133,49 +167,75 @@ function ProfileCard({ me, onChanged }) {
 
 function PasswordCard() {
   const toast = useToast();
-  const [form, setForm] = useState({ current: '', next: '', confirm: '' });
-  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ current: "", next: "", confirm: "" });
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const [change, busy] = useAction(async () => {
     if (form.next !== form.confirm) {
-      toast('New passwords do not match', 'err');
+      toast("New passwords do not match", "err");
       return;
     }
-    setBusy(true);
     try {
       await settingsApi.changePassword(form.current, form.next);
-      toast('Password changed');
-      setForm({ current: '', next: '', confirm: '' });
+      toast("Password changed");
+      setForm({ current: "", next: "", confirm: "" });
     } catch (err) {
-      toast(err.message, 'err');
-    } finally {
-      setBusy(false);
+      toast(err.message, "err");
     }
-  };
+  });
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   return (
     <div className="card">
-      <div className="card-head"><h3>Password</h3></div>
-      <form className="card-body stack" style={{ gap: 14 }} onSubmit={submit}>
+      <div className="card-head">
+        <h3>Password</h3>
+      </div>
+      <form
+        className="card-body stack gap-14"
+        onSubmit={(e) => {
+          e.preventDefault();
+          change();
+        }}
+      >
         <label className="field">
           <span>Current password</span>
-          <input className="input" type="password" value={form.current} onChange={set('current')} required autoComplete="current-password" />
+          <input
+            className="input"
+            type="password"
+            value={form.current}
+            onChange={set("current")}
+            required
+            autoComplete="current-password"
+          />
         </label>
-        <div className="grid-2" style={{ gap: 12 }}>
+        <div className="grid-2 gap-12">
           <label className="field">
             <span>New password (min 8)</span>
-            <input className="input" type="password" value={form.next} onChange={set('next')} required minLength={8} autoComplete="new-password" />
+            <input
+              className="input"
+              type="password"
+              value={form.next}
+              onChange={set("next")}
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
           </label>
           <label className="field">
             <span>Confirm new password</span>
-            <input className="input" type="password" value={form.confirm} onChange={set('confirm')} required minLength={8} autoComplete="new-password" />
+            <input
+              className="input"
+              type="password"
+              value={form.confirm}
+              onChange={set("confirm")}
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
           </label>
         </div>
-        <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={busy}>
-          {busy ? 'Changing…' : 'Change password'}
+        <button className="btn primary self-start" disabled={busy}>
+          {busy ? "Changing…" : "Change password"}
         </button>
       </form>
     </div>
@@ -184,98 +244,146 @@ function PasswordCard() {
 
 function EmailCard({ me, onChanged }) {
   const toast = useToast();
-  const [newEmail, setNewEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
-  const [step, setStep] = useState('form'); // form | verify
-  const [notice, setNotice] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState("form"); // form | verify
+  const [notice, setNotice] = useState("");
 
   // Node's admin accounts always have an email (unlike PHP's optional-until-set
   // model), so there's no "first email applies instantly" branch — every
   // change sends a confirmation code to the current address first.
-  const request = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+  const [request, requesting] = useAction(async () => {
     try {
       await settingsApi.requestEmailChange(newEmail.trim(), password);
       setNotice(`We sent a 6-digit code to ${me.email}.`);
-      setStep('verify');
+      setStep("verify");
     } catch (err) {
-      toast(err.message, 'err');
-    } finally {
-      setBusy(false);
+      toast(err.message, "err");
     }
-  };
+  });
 
-  const confirm = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+  const [confirm, confirming] = useAction(async () => {
     try {
       await settingsApi.confirmEmailChange(newEmail.trim(), code.trim());
-      toast('Email updated');
-      setStep('form'); setNewEmail(''); setPassword(''); setCode('');
+      toast("Email updated");
+      setStep("form");
+      setNewEmail("");
+      setPassword("");
+      setCode("");
       onChanged();
     } catch (err) {
-      toast(err.message, 'err');
-    } finally {
-      setBusy(false);
+      toast(err.message, "err");
     }
-  };
+  });
 
   return (
     <div className="card">
       <div className="card-head">
         <h3>Email</h3>
         <div className="grow" />
-        <span className="small muted">{me.email || 'no email set'}</span>
+        <span className="small muted">{me.email || "no email set"}</span>
       </div>
-      {step === 'form' ? (
-        <form className="card-body stack" style={{ gap: 14 }} onSubmit={request}>
+      {step === "form" ? (
+        <form
+          className="card-body stack gap-14"
+          onSubmit={(e) => {
+            e.preventDefault();
+            request();
+          }}
+        >
           {me.email ? (
             <div className="small muted">
-              Changing your email sends a 6-digit code to your <strong>current</strong> address first.
+              Changing your email sends a 6-digit code to your{" "}
+              <strong>current</strong> address first.
             </div>
           ) : (
             <div className="small muted">
-              No email on file yet — set one so account security features (verification codes,
-              upcoming 2FA login) can reach you.
+              No email on file yet — set one so account security features
+              (verification codes, upcoming 2FA login) can reach you.
             </div>
           )}
-          <div className="grid-2" style={{ gap: 12 }}>
+          <div className="grid-2 gap-12">
             <label className="field">
               <span>New email</span>
-              <input className="input" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required />
+              <input
+                className="input"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                required
+              />
             </label>
             <label className="field">
               <span>Current password</span>
-              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+              <input
+                className="input"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
             </label>
           </div>
-          <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={busy}>
-            {busy ? '…' : me.email ? 'Send verification code' : 'Save email'}
+          <button className="btn primary self-start" disabled={requesting}>
+            {requesting
+              ? "…"
+              : me.email
+                ? "Send verification code"
+                : "Save email"}
           </button>
         </form>
       ) : (
-        <form className="card-body stack" style={{ gap: 14 }} onSubmit={confirm}>
-          <div className="small" style={{ background: 'var(--good-soft)', borderRadius: 8, padding: '8px 12px' }}>
+        <form
+          className="card-body stack gap-14"
+          onSubmit={(e) => {
+            e.preventDefault();
+            confirm();
+          }}
+        >
+          <div
+            className="small"
+            style={{
+              background: "var(--good-soft)",
+              borderRadius: 8,
+              padding: "8px 12px",
+            }}
+          >
             {notice}
           </div>
           <div className="row">
             <input
               className="input mono"
-              style={{ maxWidth: 180, fontSize: 18, letterSpacing: 6, textAlign: 'center' }}
+              style={{
+                maxWidth: 180,
+                fontSize: 18,
+                letterSpacing: 6,
+                textAlign: "center",
+              }}
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={(e) =>
+                setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
               placeholder="••••••"
               inputMode="numeric"
               autoFocus
               required
             />
-            <button className="btn primary" disabled={busy || code.length !== 6}>
-              {busy ? '…' : 'Confirm'}
+            <button
+              className="btn primary"
+              disabled={confirming || code.length !== 6}
+            >
+              {confirming ? "…" : "Confirm"}
             </button>
-            <button type="button" className="btn ghost" onClick={() => { setStep('form'); setCode(''); }}>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => {
+                setStep("form");
+                setCode("");
+              }}
+            >
               Cancel
             </button>
           </div>
