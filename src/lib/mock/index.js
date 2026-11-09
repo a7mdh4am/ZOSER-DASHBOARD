@@ -152,6 +152,22 @@ const currentStaff = () =>
 
 const roleOf = (staff) => db.roles.find((r) => r.code === staff.role);
 
+// Adds a row to the staff activity log (Team > Activity feed), newest first:
+// who did what to which record, from where. A backend writes one for every
+// change; `details` keeps what a delete removed, so it can still be read.
+function logActivity(action, entityType, entityId, details = null) {
+  db.activity.unshift({
+    id: nextId(),
+    adminId: currentStaff().id,
+    action,
+    entityType,
+    entityId: entityId == null ? null : String(entityId),
+    details,
+    ipAddress: db.sessions.find((s) => s.current)?.ip ?? null,
+    createdAt: nowIso(),
+  });
+}
+
 const publicAdmin = (staff) => ({
   id: staff.id,
   username: staff.username,
@@ -345,9 +361,18 @@ on("POST", "/orders/:id/status", ({ params, body }) => {
   return { id: order.id, status: order.status };
 });
 
+// The note's text, plus how many images it had, for the activity log.
+const noteSummary = (note) => {
+  const count = note.images.length;
+  return count
+    ? `${note.edits}\n(${count} attachment${count === 1 ? "" : "s"})`
+    : note.edits;
+};
+
 on("POST", "/orders/:id/notes", ({ params, body }) => {
   const order = findOrder(params.id);
   const note = {
+    id: nextId(),
     edits: body.get("edits"),
     created_at: nowIso(),
     images: body
@@ -355,7 +380,18 @@ on("POST", "/orders/:id/notes", ({ params, body }) => {
       .map((file) => ({ image_url: URL.createObjectURL(file) })),
   };
   order.production_notes.push(note);
+  logActivity("order.note_added", "order", order.id, noteSummary(note));
   return note;
+});
+
+on("DELETE", "/orders/:id/notes/:noteId", ({ params }) => {
+  const order = findOrder(params.id);
+  const note = findOr404(order.production_notes, params.noteId, "Note");
+  removeFrom(order.production_notes, note);
+  for (const { image_url } of note.images)
+    if (image_url.startsWith("blob:")) URL.revokeObjectURL(image_url);
+  logActivity("order.note_deleted", "order", order.id, noteSummary(note));
+  return { deleted: true };
 });
 
 on("PATCH", "/orders/:id/customer-info", ({ params, body }) => {

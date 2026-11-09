@@ -200,6 +200,8 @@ export const ordersApi = {
     apiPost(`/orders/${orderId}/status`, { status: Number(status), reason }),
   addNote: (orderId, formData) =>
     apiUpload(`/orders/${orderId}/notes`, formData),
+  deleteNote: (orderId, noteId) =>
+    apiDelete(`/orders/${orderId}/notes/${noteId}`),
   updateCustomer: (orderId, form) =>
     Promise.all([
       apiPatch(`/orders/${orderId}/customer-info`, { shipPhone: form.phone }),

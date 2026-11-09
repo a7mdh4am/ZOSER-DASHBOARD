@@ -289,7 +289,7 @@ function ActivityList({ rows }) {
           color={
             r.action.startsWith("auth.")
               ? "var(--st-deposited)"
-              : r.action.includes("fail")
+              : r.action.includes("fail") || r.action.endsWith("_deleted")
                 ? "var(--st-cancelled)"
                 : "var(--accent)"
           }
@@ -305,6 +305,14 @@ function ActivityList({ rows }) {
               </span>
             )}
           </div>
+          {r.details && (
+            <div
+              className="small pre-wrap break-anywhere"
+              style={{ marginTop: 4 }}
+            >
+              {r.details}
+            </div>
+          )}
           <div className="small muted" style={{ marginTop: 2 }}>
             {r.adminDisplayName || r.adminUsername} ·{" "}
             {fmtDate(r.createdAt, true)}

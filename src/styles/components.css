@@ -62,6 +62,16 @@
   color: var(--ink);
 }
 
+/* A quiet delete inside a list: grey until hovered, then red. */
+.btn.ghost.danger {
+  color: var(--ink-3);
+}
+
+.btn.ghost.danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .btn.sm {
   padding: 5px 10px;
   font-size: 13px;

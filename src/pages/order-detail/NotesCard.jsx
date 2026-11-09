@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { IconExternal, IconPlus } from "../../components/Icons.jsx";
+import { IconExternal, IconPlus, IconTrash } from "../../components/Icons.jsx";
 import { Can, Modal, TimelineItem } from "../../components/ui.jsx";
 import { useAuth } from "../../context/auth.js";
 import { useToast } from "../../context/toast.js";
@@ -9,7 +9,23 @@ import { fmtDate } from "../../lib/format.js";
 
 export function NotesCard({ orderId, notes, onChanged }) {
   const { can } = useAuth();
+  const toast = useToast();
   const [adding, setAdding] = useState(false);
+  const canDelete = can("production.notes.delete");
+
+  // The server logs the delete, with the note's text, in the activity feed.
+  const [remove, removing] = useAction(async (note) => {
+    const preview =
+      note.edits.length > 120 ? `${note.edits.slice(0, 120)}…` : note.edits;
+    if (!window.confirm(`Delete this production note?\n\n“${preview}”`)) return;
+    try {
+      await ordersApi.deleteNote(orderId, note.id);
+      toast("Production note deleted");
+      onChanged();
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
 
   // Nothing to show and nothing to add → don't render an empty card.
   if (!notes.length && !can("production.notes.add")) return null;
@@ -43,30 +59,45 @@ export function NotesCard({ orderId, notes, onChanged }) {
           </div>
         ) : (
           <div className="timeline">
-            {notes.map((n, i) => (
-              <TimelineItem key={i} color="var(--st-production)">
-                <div className="pre-wrap">{n.edits}</div>
-                {n.images?.length > 0 && (
-                  <div className="row wrap" style={{ marginTop: 2 }}>
-                    {n.images.map((img, imgIdx) => (
-                      <a
-                        key={imgIdx}
-                        className="small text-accent"
-                        href={img.image_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Attachment {n.images.length > 1 ? imgIdx + 1 : ""}{" "}
-                        <IconExternal size={11} />
-                      </a>
-                    ))}
+            {notes.map((n) => (
+              <TimelineItem key={n.id} color="var(--st-production)">
+                <div className="note">
+                  <div className="grow">
+                    <div className="pre-wrap break-anywhere">{n.edits}</div>
+                    {n.images?.length > 0 && (
+                      <div className="row wrap" style={{ marginTop: 2 }}>
+                        {n.images.map((img, imgIdx) => (
+                          <a
+                            key={imgIdx}
+                            className="small text-accent"
+                            href={img.image_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Attachment {n.images.length > 1 ? imgIdx + 1 : ""}{" "}
+                            <IconExternal size={11} />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {n.created_at && (
+                      <div className="small muted">
+                        {fmtDate(n.created_at, true)}
+                      </div>
+                    )}
                   </div>
-                )}
-                {n.created_at && (
-                  <div className="small muted">
-                    {fmtDate(n.created_at, true)}
-                  </div>
-                )}
+                  {canDelete && (
+                    <button
+                      className="btn ghost danger icon"
+                      onClick={() => remove(n)}
+                      disabled={removing}
+                      title="Delete note"
+                      aria-label="Delete note"
+                    >
+                      <IconTrash size={15} />
+                    </button>
+                  )}
+                </div>
               </TimelineItem>
             ))}
           </div>

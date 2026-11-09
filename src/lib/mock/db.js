@@ -103,6 +103,7 @@ const ROLES = [
       "orders.shipment.status.update",
       "designer.view",
       "production.notes.add",
+      "production.notes.delete",
       "customers.view",
       "users.view",
     ],
@@ -774,6 +775,7 @@ for (let i = 0; i < ORDER_COUNT; i++) {
 
   if (status !== PENDING && status !== CANCELLED && chance(0.3)) {
     order.production_notes.push({
+      id: nextId(),
       edits: pick(PRODUCTION_NOTES),
       created_at: isoAt(placedAt + int(1, 48) * HOUR_MS),
       images: chance(0.4)

@@ -189,6 +189,23 @@
   display: none;
 }
 
+/* A production note on the order page: the note, then its delete button
+   at the top right. */
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.note > .grow {
+  min-width: 0;
+}
+
+.note > .btn.icon {
+  padding: 6px;
+  margin: -4px -4px 0 0;
+}
+
 /* ---------- designer cards ---------- */
 .design-grid {
   display: grid;

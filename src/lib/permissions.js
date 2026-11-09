@@ -30,6 +30,10 @@ export const PERMISSIONS = [
     code: "production.notes.add",
     description: "Add production notes to orders",
   },
+  {
+    code: "production.notes.delete",
+    description: "Delete production notes from orders",
+  },
   { code: "customers.view", description: "Open the Customers page" },
   {
     code: "users.view",
