@@ -96,3 +96,7 @@ export const colorHex = (name) =>
       .trim()
       .toLowerCase()
   ] || null;
+
+/** "1 card", "4 keychains": how much of an order item there is. */
+export const countLabel = (count, kind) =>
+  `${count} ${kind}${count === 1 ? "" : "s"}`;

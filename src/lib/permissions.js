@@ -45,6 +45,11 @@ export const PERMISSIONS = [
     description: "Create customer accounts and order profiles",
   },
   {
+    code: "profiles.items.manage",
+    description:
+      "Block, delete, disconnect, replace or add NFC items on a profile",
+  },
+  {
     code: "profiles.themes.add",
     description: "Give profile themes to customers or take them back",
   },

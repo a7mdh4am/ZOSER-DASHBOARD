@@ -16,13 +16,18 @@ import {
   cityOf,
   db,
   depositsOf,
+  addProfile,
   frontImageOf,
+  itemsOf,
   newestFirst,
+  newItemCode,
+  newNfcItem,
   nextId,
   nowIso,
   ORDER_STATUS,
   orderMatchesSearch,
   paidOf,
+  productNames,
   productOf,
   recalcTotals,
   round2,
@@ -41,6 +46,7 @@ const LATENCY_MS = 150;
 const SESSION_KEY = "zoser-mock-user";
 const DEFAULT_USERNAME = "admin";
 const PROFILE_BASE_URL = "https://zoser.example/profile";
+const NFC_LINK_BASE_URL = "https://zoser.example/i";
 
 class MockError extends Error {
   constructor(status, message) {
@@ -228,17 +234,73 @@ on("GET", "/geo/cities", () => ({
 const findOrder = (id) => findOr404(db.orders, id, "Order");
 const newestOrderFirst = (a, b) => b.order_time.localeCompare(a.order_time);
 const profileLink = (pid) => `${PROFILE_BASE_URL}/${pid}`;
-const userOfOrder = (order) =>
-  db.users.find((u) => u.username === `z${order.id}`) ?? null;
+const findLine = (order, id) => findOr404(order.lines, id, "Order item");
 
-const themeStatuses = (user) =>
+// `holder` is a customer account or a shared profile: both keep theme_ids.
+const themeStatuses = (holder) =>
   db.customThemes
     .filter((t) => t.is_active)
     .map((t) => ({
       theme_id: t.id,
       theme: t.theme,
-      status: user.theme_ids.includes(t.id) ? "owned" : "available",
+      status: holder.theme_ids.includes(t.id) ? "owned" : "available",
     }));
+
+const lineKind = (line) =>
+  productOf(line)?.product_types.code === "KEYCHAIN" ? "keychain" : "card";
+
+const lineRow = (line) => ({
+  ...line,
+  product_name: productOf(line)?.name ?? null,
+  kind: lineKind(line),
+});
+
+function nfcItemRow(item, line) {
+  const card = line.items.find((c) => c.id === item.card_id);
+  const owner = db.users.find((u) => u.id === item.owner_user_id);
+  return {
+    id: item.id,
+    label: card?.name ?? item.label,
+    kind: lineKind(line),
+    is_extra: !card,
+    link: `${NFC_LINK_BASE_URL}/${item.code}`,
+    status: item.status,
+    owner: owner
+      ? { id: owner.id, username: owner.username, name: owner.name }
+      : null,
+    connected_at: item.connected_at,
+    created_at: item.created_at,
+  };
+}
+
+const profileRow = (order, profile) => {
+  const line = order.lines.find((l) => l.id === profile.line_id);
+  return {
+    id: profile.id,
+    pid: profile.pid,
+    line_id: profile.line_id,
+    themes: themeStatuses(profile),
+    items: db.nfcItems
+      .filter((item) => item.profile_id === profile.id)
+      .map((item) => nfcItemRow(item, line)),
+  };
+};
+
+const profilesOf = (order) =>
+  db.profiles
+    .filter((p) => p.order_id === order.id)
+    .map((p) => profileRow(order, p));
+
+// An NFC item, with the order item and order it belongs to.
+function findNfcItem(id) {
+  const item = findOr404(db.nfcItems, id, "NFC item");
+  const profile = db.profiles.find((p) => p.id === item.profile_id);
+  const order = db.orders.find((o) => o.id === profile.order_id);
+  const line = order.lines.find((l) => l.id === profile.line_id);
+  return { item, profile, order, line };
+}
+
+const nfcItemName = ({ item, line }) => nfcItemRow(item, line).label;
 
 const noteRows = (order) =>
   [...order.production_notes].sort(newestFirst).map((note) => ({
@@ -263,8 +325,8 @@ on("GET", "/orders", ({ query }) => {
       full_name: o.full_name,
       phone: o.phone,
       city: cityOf(o)?.name ?? null,
-      product_name: productOf(o)?.name ?? null,
-      item_count: o.cards.length,
+      product_name: productNames(o),
+      item_count: itemsOf(o).length,
       status: o.status,
       shipping_id: o.shipping_id,
       price: o.subtotal,
@@ -280,7 +342,6 @@ on("GET", "/orders", ({ query }) => {
 
 on("GET", "/orders/:id", ({ params }) => {
   const order = findOrder(params.id);
-  const user = userOfOrder(order);
   return {
     order: {
       id: order.id,
@@ -294,17 +355,9 @@ on("GET", "/orders/:id", ({ params }) => {
       zone: zoneOf(order)?.name ?? null,
       city_id: order.city_id,
       zone_id: order.zone_id,
-      product_id: order.product_id,
-      product_name: productOf(order)?.name ?? null,
-      price: order.unit_price,
-      group_name: order.group_name,
-      date: order.date,
-      addr: order.addr,
-      song: order.song,
-      notes: order.notes,
+      product_name: productNames(order),
     },
-    items: order.cards,
-    extras: order.extras,
+    lines: order.lines.map(lineRow),
     deposits: depositsOf(order)
       .sort(newestFirst)
       .map(({ id, value, created_at }) => ({ id, value, created_at })),
@@ -319,7 +372,6 @@ on("GET", "/orders/:id", ({ params }) => {
       .filter((s) => s.order_id === order.id)
       .sort(newestFirst),
     notes: noteRows(order),
-    card_count: order.cards.length,
     edit_products: db.products
       .filter((p) => p.is_active)
       .map((p) => ({
@@ -331,11 +383,8 @@ on("GET", "/orders/:id", ({ params }) => {
           price: t.price,
         })),
       })),
-    profile: {
-      username: user?.username ?? `z${order.id}`,
-      link: order.profile_pid ? profileLink(order.profile_pid) : null,
-      themes: user ? themeStatuses(user) : [],
-    },
+    edit_extras: db.extraOptions,
+    profiles: profilesOf(order),
   };
 });
 
@@ -346,6 +395,7 @@ on("POST", "/orders/:id/deposits", ({ params, body }) => {
   const entry = {
     id: nextId(),
     type: "deposit",
+    category: "Order deposit",
     order_id: order.id,
     value,
     description: `${order.full_name} Deposit`,
@@ -408,52 +458,189 @@ on("PATCH", "/orders/:id/shipping", ({ params, body }) => {
   return { id: order.id };
 });
 
-on("POST", "/orders/:id/design", ({ params, body }) => {
+// Multipart: `design` holds the fields as JSON, and `image_<cardId>` a new
+// picture for that card, so the text and images save together or not at all.
+on("POST", "/orders/:id/lines/:lineId/design", ({ params, body }) => {
   const order = findOrder(params.id);
-  if (body.productId) order.product_id = body.productId;
-  if (body.price !== undefined) order.unit_price = body.price;
+  const line = findLine(order, params.lineId);
+  const design = JSON.parse(body.get("design"));
+  const productChanged =
+    design.productId && design.productId !== line.product_id;
+  if (design.productId) line.product_id = design.productId;
+  if (design.price !== undefined) line.price = design.price;
   // The modal leaves out fields it has blanked, so a missing field means cleared.
-  order.group_name = body.groupName ?? null;
-  order.date = body.date ?? null;
-  order.addr = body.addr ?? null;
-  order.song = body.song ?? null;
-  order.notes = body.notes ?? null;
-  // A new color (or design) brings that color's code and picture with it.
-  const product = productOf(order);
-  for (const { id, name, color } of body.items ?? []) {
-    const card = order.cards.find((c) => c.id === id);
+  line.group_name = design.groupName ?? null;
+  line.date = design.date ?? null;
+  line.addr = design.addr ?? null;
+  line.song = design.song ?? null;
+  line.notes = design.notes ?? null;
+  const product = productOf(line);
+  for (const { id, name, color } of design.items ?? []) {
+    const card = line.items.find((c) => c.id === id);
     if (!card) continue;
+    const colorChanged = productChanged || card.color !== color;
     card.name = name;
     card.color = color;
     const match = product?.colors.find((c) => c.name === color);
-    if (match) {
-      card.color_hex = match.hex;
-      card.full_image_url = frontImageOf(product, match) ?? card.full_image_url;
+    if (match) card.color_hex = match.hex;
+    // A new color or design brings its picture; an uploaded one beats that.
+    // Saving with neither changed keeps whatever picture the card has.
+    const upload = body.get(`image_${id}`);
+    const nextImage = upload
+      ? URL.createObjectURL(upload)
+      : match && colorChanged
+        ? frontImageOf(product, match)
+        : null;
+    if (nextImage) {
+      if (card.full_image_url?.startsWith("blob:"))
+        URL.revokeObjectURL(card.full_image_url);
+      card.full_image_url = nextImage;
     }
   }
   recalcTotals(order);
   return { id: order.id };
 });
 
+// An add-on's name and price from a request, checked, or a 422/409 thrown.
+function readExtra(line, body, editing = null) {
+  const name = String(body.name ?? "").trim();
+  const price = Number(body.price);
+  if (!name) throw new MockError(422, "Enter the add-on's name");
+  if (body.price === "" || !(price >= 0))
+    throw new MockError(422, "Enter a price of 0 or more");
+  const taken = line.extras.some(
+    (x) => x !== editing && x.extra_name.toLowerCase() === name.toLowerCase(),
+  );
+  if (taken) throw conflict(`This item already has ${name}`);
+  return { extra_name: name, extra_price: price };
+}
+
+on("POST", "/orders/:id/lines/:lineId/extras", ({ params, body }) => {
+  const order = findOrder(params.id);
+  const line = findLine(order, params.lineId);
+  const extra = { id: nextId(), ...readExtra(line, body) };
+  line.extras.push(extra);
+  recalcTotals(order);
+  logActivity(
+    "order.extra_added",
+    "order",
+    order.id,
+    `${extra.extra_name}: ${extra.extra_price} EGP`,
+  );
+  return extra;
+});
+
+on("PATCH", "/orders/:id/lines/:lineId/extras/:extraId", ({ params, body }) => {
+  const order = findOrder(params.id);
+  const line = findLine(order, params.lineId);
+  const extra = findOr404(line.extras, params.extraId, "Add-on");
+  const before = `${extra.extra_name}: ${extra.extra_price} EGP`;
+  Object.assign(extra, readExtra(line, body, extra));
+  recalcTotals(order);
+  logActivity(
+    "order.extra_updated",
+    "order",
+    order.id,
+    `${before} → ${extra.extra_name}: ${extra.extra_price} EGP`,
+  );
+  return extra;
+});
+
+on("DELETE", "/orders/:id/lines/:lineId/extras/:extraId", ({ params }) => {
+  const order = findOrder(params.id);
+  const line = findLine(order, params.lineId);
+  const extra = findOr404(line.extras, params.extraId, "Add-on");
+  removeFrom(line.extras, extra);
+  recalcTotals(order);
+  logActivity(
+    "order.extra_removed",
+    "order",
+    order.id,
+    `${extra.extra_name}: ${extra.extra_price} EGP`,
+  );
+  return { deleted: true };
+});
+
 on("POST", "/orders/:id/profile", ({ params }) => {
   const order = findOrder(params.id);
-  if (order.profile_pid) throw conflict("This order already has a profile");
-  order.profile_pid = `p${order.id}`;
-  db.users.push({
-    id: nextId(),
-    username: `z${order.id}`,
-    name: order.full_name,
-    friends_count: order.cards.length,
-    is_blocked: false,
-    pid: order.profile_pid,
-    theme_ids: [],
-    created_at: nowIso(),
-  });
-  return {
-    username: `z${order.id}`,
-    link: profileLink(order.profile_pid),
-    temporaryPassword: "dummy-pass-123",
-  };
+  const missing = order.lines.filter(
+    (line) => !db.profiles.some((p) => p.line_id === line.id),
+  );
+  if (!missing.length) throw conflict("This order already has its profiles");
+  const created = missing.map(
+    (line) => addProfile(order, line, nowIso()).profile,
+  );
+  const links = created.reduce(
+    (count, p) =>
+      count + db.nfcItems.filter((i) => i.profile_id === p.id).length,
+    0,
+  );
+  logActivity(
+    "order.profiles_created",
+    "order",
+    order.id,
+    `${created.length} profile${created.length === 1 ? "" : "s"}, ${links} link${links === 1 ? "" : "s"}`,
+  );
+  return { profiles: created.map((p) => profileRow(order, p)) };
+});
+
+on("POST", "/profiles/:id/items", ({ params, body }) => {
+  const profile = findOr404(db.profiles, params.id, "Profile");
+  const label = String(body.label ?? "").trim();
+  if (!label) throw new MockError(422, "Enter a name for the new item");
+  const order = db.orders.find((o) => o.id === profile.order_id);
+  const line = order.lines.find((l) => l.id === profile.line_id);
+  const item = newNfcItem(profile.id, null, label, nowIso());
+  logActivity("nfc_item.added", "order", order.id, label);
+  return nfcItemRow(item, line);
+});
+
+on("POST", "/nfc-items/:id/status", ({ params, body }) => {
+  const found = findNfcItem(params.id);
+  if (!["active", "blocked"].includes(body.status))
+    throw new MockError(422, "Status must be active or blocked");
+  found.item.status = body.status;
+  logActivity(
+    body.status === "blocked" ? "nfc_item.blocked" : "nfc_item.unblocked",
+    "order",
+    found.order.id,
+    nfcItemName(found),
+  );
+  return nfcItemRow(found.item, found.line);
+});
+
+on("POST", "/nfc-items/:id/disconnect", ({ params }) => {
+  const found = findNfcItem(params.id);
+  if (found.item.owner_user_id == null)
+    throw conflict("This item isn't connected to anyone");
+  found.item.owner_user_id = null;
+  found.item.connected_at = null;
+  logActivity(
+    "nfc_item.disconnected",
+    "order",
+    found.order.id,
+    nfcItemName(found),
+  );
+  return nfcItemRow(found.item, found.line);
+});
+
+on("POST", "/nfc-items/:id/replace-link", ({ params }) => {
+  const found = findNfcItem(params.id);
+  found.item.code = newItemCode();
+  logActivity(
+    "nfc_item.link_replaced",
+    "order",
+    found.order.id,
+    nfcItemName(found),
+  );
+  return nfcItemRow(found.item, found.line);
+});
+
+on("DELETE", "/nfc-items/:id", ({ params }) => {
+  const found = findNfcItem(params.id);
+  logActivity("nfc_item.deleted", "order", found.order.id, nfcItemName(found));
+  removeFrom(db.nfcItems, found.item);
+  return { deleted: true };
 });
 
 on("POST", "/orders/:id/shipments", ({ params, body }) => {
@@ -505,16 +692,16 @@ on("GET", "/production/orders", ({ query }) => {
       status: o.status,
       order_time: o.order_time,
       full_name: o.full_name,
-      product_name: productOf(o)?.name ?? null,
-      item_count: o.cards.length,
-      group_name: o.group_name,
+      product_name: productNames(o),
+      item_count: itemsOf(o).length,
+      group_name: o.lines.find((l) => l.group_name)?.group_name ?? null,
       // Each color once, with its code, for the queue cards' color badges.
       colors: [
         ...new Map(
-          o.cards.map((c) => [c.color, { name: c.color, hex: c.color_hex }]),
+          itemsOf(o).map((c) => [c.color, { name: c.color, hex: c.color_hex }]),
         ).values(),
       ],
-      song: o.song,
+      song: o.lines.find((l) => l.song)?.song ?? null,
     })),
     counts: {
       deposited: countStatus(DEPOSITED),
@@ -534,14 +721,9 @@ on("GET", "/production/orders/:id", ({ params }) => {
       order_time: order.order_time,
       full_name: order.full_name,
       phone: order.phone,
-      product_name: productOf(order)?.name ?? null,
-      group_name: order.group_name,
-      date: order.date,
-      addr: order.addr,
-      song: order.song,
-      notes: order.notes,
+      product_name: productNames(order),
     },
-    items: order.cards,
+    lines: order.lines.map(lineRow),
     notes: noteRows(order),
   };
 });
@@ -581,10 +763,13 @@ on("POST", "/finance/costs", ({ body }) => {
 });
 
 on("POST", "/finance/entries", ({ body }) => {
+  if (!db.ledgerCategories[body.type]?.includes(body.category))
+    throw new MockError(422, "Choose a category for this entry");
   if (body.orderId) findOrder(body.orderId);
   const entry = {
     id: nextId(),
     type: body.type,
+    category: body.category,
     value: body.value,
     description: body.description,
     order_id: body.orderId ?? null,
@@ -948,7 +1133,9 @@ on("GET", "/activity", ({ query }) => {
 on("GET", "/themes", () => ({
   custom: db.customThemes.map((theme) => ({
     ...theme,
-    owners: db.users.filter((u) => u.theme_ids.includes(theme.id)).length,
+    owners: [...db.users, ...db.profiles].filter((holder) =>
+      holder.theme_ids.includes(theme.id),
+    ).length,
   })),
   site: db.siteThemes,
 }));
@@ -976,11 +1163,14 @@ on("POST", "/themes/custom/:id/toggle", ({ params, body }) => {
 });
 
 on("POST", "/themes/assign", ({ body }) => {
-  const user = db.users.find((u) => u.username === body.username);
-  if (!user) throw notFound("Customer");
-  user.theme_ids = user.theme_ids.filter((id) => id !== body.themeId);
-  if (body.action === "assign") user.theme_ids.push(body.themeId);
-  return { themes: themeStatuses(user) };
+  // A shared order profile (profileId) or a customer account (username).
+  const holder = body.profileId
+    ? findOr404(db.profiles, body.profileId, "Profile")
+    : db.users.find((u) => u.username === body.username);
+  if (!holder) throw notFound("Customer");
+  holder.theme_ids = holder.theme_ids.filter((id) => id !== body.themeId);
+  if (body.action === "assign") holder.theme_ids.push(body.themeId);
+  return { themes: themeStatuses(holder) };
 });
 
 on("POST", "/themes/site", ({ body }) => {

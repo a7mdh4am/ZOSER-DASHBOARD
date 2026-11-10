@@ -348,7 +348,7 @@ function AssignCard() {
               :
             </div>
             <ThemeChips
-              username={lookup.username}
+              holder={{ username: lookup.username }}
               themes={lookup.themes}
               onChange={(themes) =>
                 setLookup((current) => ({ ...current, themes }))

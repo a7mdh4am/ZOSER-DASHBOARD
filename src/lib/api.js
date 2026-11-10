@@ -211,10 +211,27 @@ export const ordersApi = {
         zoneId: form.zoneId,
       }),
     ]),
-  updateDesign: (orderId, body) => apiPost(`/orders/${orderId}/design`, body),
+  updateDesign: (orderId, lineId, formData) =>
+    apiUpload(`/orders/${orderId}/lines/${lineId}/design`, formData),
+  addExtra: (orderId, lineId, body) =>
+    apiPost(`/orders/${orderId}/lines/${lineId}/extras`, body),
+  updateExtra: (orderId, lineId, extraId, body) =>
+    apiPatch(`/orders/${orderId}/lines/${lineId}/extras/${extraId}`, body),
+  deleteExtra: (orderId, lineId, extraId) =>
+    apiDelete(`/orders/${orderId}/lines/${lineId}/extras/${extraId}`),
   createProfile: (orderId) => apiPost(`/orders/${orderId}/profile`),
   createShipment: (orderId, body) =>
     apiPost(`/orders/${orderId}/shipments`, body),
+};
+
+/** One physical NFC item (a card or keychain) and the link programmed on it. */
+export const nfcApi = {
+  add: (profileId, label) => apiPost(`/profiles/${profileId}/items`, { label }),
+  setStatus: (itemId, status) =>
+    apiPost(`/nfc-items/${itemId}/status`, { status }),
+  disconnect: (itemId) => apiPost(`/nfc-items/${itemId}/disconnect`),
+  replaceLink: (itemId) => apiPost(`/nfc-items/${itemId}/replace-link`),
+  remove: (itemId) => apiDelete(`/nfc-items/${itemId}`),
 };
 
 export const shipmentsApi = {

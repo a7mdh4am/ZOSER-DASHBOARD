@@ -75,15 +75,14 @@ export function OrderItemsGrid({ items, nameClassName }) {
 
 /**
  * What the customer asked for: group name, anniversary date, on-card address,
- * song and notes, each with a copy button. `showDesign` adds the design name.
+ * song and notes of one order item, each with a copy button.
  */
-export function CustomizationFields({ order, showDesign = false }) {
+export function CustomizationFields({ order }) {
   const fields = [
-    showDesign && ["Design", order.product_name],
     ["Group name", order.group_name],
     ["Anniversary date", order.date ? fmtProductionDate(order.date) : null],
     ["Addr", order.addr],
-  ].filter((field) => field && field[1]);
+  ].filter((field) => field[1]);
 
   return (
     <div className="kv">

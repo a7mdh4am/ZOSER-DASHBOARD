@@ -20,10 +20,14 @@
   --good-soft: rgba(12, 163, 12, 0.12);
   --warn-soft: rgba(250, 178, 25, 0.16);
   /* the same in both themes */
-  --danger-ink: #ffffff; /* text on solid red: error toast, remove-picture button */
-  --toast-tick: #7ce27c; /* the success tick on the (inverted) toast */
-  --overlay: rgba(0, 0, 0, 0.45); /* behind popups */
-  --scrim: rgba(0, 0, 0, 0.4); /* behind the mobile menu */
+  --danger-ink: #ffffff;
+  /* text on solid red: error toast, remove-picture button */
+  --toast-tick: #7ce27c;
+  /* the success tick on the (inverted) toast */
+  --overlay: rgba(0, 0, 0, 0.45);
+  /* behind popups */
+  --scrim: rgba(0, 0, 0, 0.4);
+  /* behind the mobile menu */
 
   /* order-status series (categorical slots, fixed mapping) */
   --st-pending: #eda100;
@@ -51,8 +55,8 @@
   --ink-3: #898781;
   --hairline: rgba(255, 255, 255, 0.1);
   --grid: #2c2c2a;
-  --accent: #3987e5;
-  --accent-soft: rgba(57, 135, 229, 0.18);
+  --accent: #e9979a;
+  --accent-soft: rgba(250, 197, 199, 0.22);
   --danger: #e66767;
   --danger-soft: rgba(230, 103, 103, 0.14);
   --good: #0ca30c;

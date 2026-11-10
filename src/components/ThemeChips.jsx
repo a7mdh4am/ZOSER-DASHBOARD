@@ -3,18 +3,18 @@ import { useAction } from "../hooks/useAction.js";
 import { themesApi } from "../lib/api.js";
 
 /**
- * A customer's profile themes as chips, owned ones active (✓). Clicking one
- * gives it to `username` or takes it back; `onChange` gets the updated list.
- * Used on the order page and the Themes page.
+ * Profile themes as chips, owned ones active (✓). Clicking one gives it to
+ * `holder` or takes it back; `onChange` gets the updated list. `holder` is
+ * `{ profileId }` on the order page and `{ username }` on the Themes page.
  */
-export function ThemeChips({ username, themes, onChange, gap }) {
+export function ThemeChips({ holder, themes, onChange, gap }) {
   const toast = useToast();
 
   const [toggle] = useAction(async (t) => {
     const owned = t.status === "owned";
     try {
       const res = await themesApi.assign({
-        username,
+        ...holder,
         themeId: t.theme_id,
         action: owned ? "remove" : "assign",
       });

@@ -170,8 +170,13 @@ const ROLES = [
   [
     "CARD_PROVISIONER",
     "Card Provisioner",
-    "Creates customer accounts and order profiles",
-    ["orders.view", "customers.view", "profiles.create"],
+    "Creates customer accounts and order profiles, and manages NFC items",
+    [
+      "orders.view",
+      "customers.view",
+      "profiles.create",
+      "profiles.items.manage",
+    ],
   ],
   [
     "MARKETING",
@@ -589,10 +594,11 @@ const CUSTOMERS = Array.from({ length: 120 }, (_, i) => {
   };
 });
 
+export const lineSubtotal = (line) =>
+  line.price + sum(line.extras, (x) => x.extra_price);
+
 export function recalcTotals(order) {
-  order.subtotal = round2(
-    order.unit_price + sum(order.extras, (x) => x.extra_price),
-  );
+  order.subtotal = round2(sum(order.lines, lineSubtotal));
   order.grand_total = round2(
     order.subtotal + order.shipping_fee - order.discount_amount,
   );
@@ -621,13 +627,128 @@ function trackingNumber(carrier) {
 const ORDERS = [];
 const SHIPMENTS = [];
 const LEDGER = [];
+
+// What staff can file an entry under. Deposits are always "Order deposit".
+const LEDGER_CATEGORIES = {
+  expense: [
+    "Ads & marketing",
+    "Salaries",
+    "Shipping & courier fees",
+    "Materials",
+    "Packaging",
+    "Rent & utilities",
+    "Software & subscriptions",
+    "Other",
+  ],
+  income: ["Shipping collection", "Corporate order", "Other"],
+};
 const REFUNDS = [];
 const USERS = [];
+const PROFILES = [];
+const NFC_ITEMS = [];
+
+// One order item, shaped like a line of the shop's cart: a design, how many of
+// it, and what the customer asked for on it. `price` is the whole item's price
+// (the tier for its count). Keychains carry only a name and a design each;
+// cards also have the couple's/friends' date, place and song.
+function makeLine(product, placedAt) {
+  const isKeychain = product.product_types.code === "KEYCHAIN";
+  const count = pick(
+    isKeychain ? [2, 2, 2, 3, 3, 4, 5, 6] : [2, 2, 2, 2, 2, 2, 3, 3, 4, 5],
+  );
+  return {
+    id: nextId(),
+    product_id: product.id,
+    price: product.card_price_tiers.find((t) => t.cards_count === count).price,
+    extras: chance(0.25) ? [{ id: nextId(), ...pick(EXTRAS) }] : [],
+    group_name: !isKeychain && count > 2 ? pick(GROUP_NAMES) : null,
+    date: isKeychain
+      ? null
+      : new Date(placedAt - int(100, 3000) * DAY_MS).toISOString().slice(0, 10),
+    addr: !isKeychain && chance(0.4) ? pick(PLACES) : null,
+    song:
+      !isKeychain && chance(0.6)
+        ? `https://example.com/songs/${int(1000, 9999)}`
+        : null,
+    notes: chance(0.3) ? pick(CUSTOMER_NOTES) : null,
+    items: Array.from({ length: count }, () => {
+      const name = pick(FIRST_NAMES);
+      const color = pick(product.colors);
+      return {
+        id: nextId(),
+        name,
+        color: color.name,
+        color_hex: color.hex,
+        full_image_url: frontImageOf(product, color),
+      };
+    }),
+  };
+}
+
+// The link programmed on an NFC item ends in this. Letters that look alike are
+// left out, since these get read off screens. A backend must use a secure
+// random source: whoever knows a code can try to connect that item.
+const CODE_LETTERS = "abcdefghjkmnpqrstuvwxyz23456789";
+export const newItemCode = () =>
+  Array.from(
+    { length: 12 },
+    () => CODE_LETTERS[int(0, CODE_LETTERS.length - 1)],
+  ).join("");
+
+export function newNfcItem(profileId, cardId, label, createdAt) {
+  const item = {
+    id: nextId(),
+    code: newItemCode(),
+    profile_id: profileId,
+    card_id: cardId, // null for an extra item added by staff
+    label, // only extra items have one; a card shows its own name
+    status: "active", // or "blocked"
+    owner_user_id: null,
+    connected_at: null,
+    created_at: createdAt,
+  };
+  NFC_ITEMS.push(item);
+  return item;
+}
+
+// One order item gets one shared profile, and one link per physical item in it.
+export function addProfile(order, line, createdAt) {
+  const profile = {
+    id: nextId(),
+    pid: `p${line.id}`,
+    order_id: order.id,
+    line_id: line.id,
+    theme_ids: [],
+    created_at: createdAt,
+  };
+  PROFILES.push(profile);
+  const items = line.items.map((card) =>
+    newNfcItem(profile.id, card.id, null, createdAt),
+  );
+  return { profile, items };
+}
+
+const seedOwner = (item, card, line, profile, ms) => {
+  const user = {
+    id: nextId(),
+    username: `${card.name.toLowerCase()}.${item.id}`,
+    name: card.name,
+    friends_count: line.items.length,
+    is_blocked: false,
+    pid: profile.pid,
+    theme_ids: [],
+    created_at: isoAt(ms),
+  };
+  USERS.push(user);
+  item.owner_user_id = user.id;
+  item.connected_at = isoAt(ms);
+};
 
 const addDeposit = (order, value, ms, description) =>
   LEDGER.push({
     id: nextId(),
     type: "deposit",
+    category: "Order deposit",
     order_id: order.id,
     value,
     created_at: isoAt(ms),
@@ -659,16 +780,15 @@ for (let i = 0; i < ORDER_COUNT; i++) {
   const status = statusForAge(age);
   const customer = pick(CUSTOMERS);
   const product = pick(orderWeightedProducts);
-  // Keychain orders carry only a name and a design per keychain; cards also
-  // have the couple's/friends' date, place and song.
-  const isKeychain = product.product_types.code === "KEYCHAIN";
-  const cardCount = pick(
-    isKeychain ? [2, 2, 2, 3, 3, 4, 5, 6] : [2, 2, 2, 2, 2, 2, 3, 3, 4, 5],
+  const lines = [makeLine(product, placedAt)];
+  // Like the shop's cart, some orders mix cards and keychains.
+  const otherKind = orderWeightedProducts.filter(
+    (p) => p.product_types.code !== product.product_types.code,
   );
+  if (otherKind.length && chance(0.25))
+    lines.push(makeLine(pick(otherKind), placedAt));
+  const itemsTotal = sum(lines, (line) => line.price);
   const coupon = chance(0.22) ? pick(ORDER_COUPONS) : null;
-  const unitPrice = product.card_price_tiers.find(
-    (t) => t.cards_count === cardCount,
-  ).price;
   const city = CITIES.find((c) => c.id === customer.city_id);
 
   const order = {
@@ -677,40 +797,16 @@ for (let i = 0; i < ORDER_COUNT; i++) {
     status,
     payment_override: null, // 'refunded' | 'failed'; anything else is derived from deposits
     ...customer,
-    product_id: product.id,
-    unit_price: unitPrice,
-    extras: chance(0.25) ? [{ ...pick(EXTRAS) }] : [],
+    lines,
     coupon: coupon?.coupon ?? null,
     discount_amount: !coupon
       ? 0
       : coupon.type === "fixed"
         ? coupon.value
-        : Math.round((unitPrice * coupon.value) / 100),
+        : Math.round((itemsTotal * coupon.value) / 100),
     shipping_fee: city.zones.find((z) => z.id === customer.zone_id).shippingFee,
-    group_name: !isKeychain && cardCount > 2 ? pick(GROUP_NAMES) : null,
-    date: isKeychain
-      ? null
-      : new Date(placedAt - int(100, 3000) * DAY_MS).toISOString().slice(0, 10),
-    addr: !isKeychain && chance(0.4) ? pick(PLACES) : null,
-    song:
-      !isKeychain && chance(0.6)
-        ? `https://example.com/songs/${int(1000, 9999)}`
-        : null,
-    notes: chance(0.3) ? pick(CUSTOMER_NOTES) : null,
     shipping_id: null,
-    profile_pid: null,
     production_notes: [],
-    cards: Array.from({ length: cardCount }, () => {
-      const name = pick(FIRST_NAMES);
-      const color = pick(product.colors);
-      return {
-        id: nextId(),
-        name,
-        color: color.name,
-        color_hex: color.hex,
-        full_image_url: frontImageOf(product, color),
-      };
-    }),
   };
   recalcTotals(order);
   ORDERS.push(order);
@@ -789,17 +885,17 @@ for (let i = 0; i < ORDER_COUNT; i++) {
       ? chance(0.85)
       : status === PRODUCTION && chance(0.3);
   if (hasProfile) {
-    order.profile_pid = `p${order.id}`;
-    USERS.push({
-      id: nextId(),
-      username: `z${order.id}`,
-      name: order.full_name,
-      friends_count: cardCount,
-      is_blocked: false,
-      pid: order.profile_pid,
-      theme_ids: chance(0.25) ? [pick(CUSTOM_THEMES).id] : [],
-      created_at: order.order_time,
-    });
+    for (const line of order.lines) {
+      const { profile, items } = addProfile(order, line, order.order_time);
+      if (chance(0.25)) profile.theme_ids.push(pick(CUSTOM_THEMES).id);
+      // Delivered items have mostly been scanned; a few were blocked since.
+      if (status !== SHIPPED_PAID) continue;
+      for (const item of items) {
+        const card = line.items.find((c) => c.id === item.card_id);
+        if (chance(0.7)) seedOwner(item, card, line, profile, deliveredAt);
+        if (chance(0.06)) item.status = "blocked";
+      }
+    }
   }
 }
 
@@ -834,6 +930,7 @@ for (let month = 0; month < 8; month++) {
     {
       id: nextId(),
       type: "expense",
+      category: "Ads & marketing",
       order_id: null,
       value: int(2500, 4000),
       description: "Meta ads",
@@ -842,6 +939,7 @@ for (let month = 0; month < 8; month++) {
     {
       id: nextId(),
       type: "expense",
+      category: "Packaging",
       order_id: null,
       value: int(800, 1500),
       description: "Packaging restock",
@@ -850,6 +948,7 @@ for (let month = 0; month < 8; month++) {
     {
       id: nextId(),
       type: "expense",
+      category: "Materials",
       order_id: null,
       value: int(1500, 2500),
       description: "NFC chips order",
@@ -860,6 +959,7 @@ for (let month = 0; month < 8; month++) {
     LEDGER.push({
       id: nextId(),
       type: "income",
+      category: "Corporate order",
       order_id: null,
       value: int(3000, 6000),
       description: "Corporate gifting order",
@@ -950,16 +1050,26 @@ export const db = {
   orders: ORDERS,
   shipments: SHIPMENTS,
   ledger: LEDGER,
+  ledgerCategories: LEDGER_CATEGORIES,
   refunds: REFUNDS,
   users: USERS,
+  profiles: PROFILES,
+  nfcItems: NFC_ITEMS,
+  extraOptions: EXTRAS,
   activity: ACTIVITY,
   sessions: SESSIONS,
 };
 
 export const newestFirst = (a, b) =>
   String(b.created_at).localeCompare(String(a.created_at));
-export const productOf = (order) =>
-  db.products.find((p) => p.id === order.product_id) ?? null;
+export const productOf = (line) =>
+  db.products.find((p) => p.id === line.product_id) ?? null;
+/** The order's designs by name, each once: "Classic + Heart keychain". */
+export const productNames = (order) =>
+  [...new Set(order.lines.map((l) => productOf(l)?.name).filter(Boolean))].join(
+    " + ",
+  ) || null;
+export const itemsOf = (order) => order.lines.flatMap((l) => l.items);
 export const cityOf = (order) =>
   db.cities.find((c) => c.id === order.city_id) ?? null;
 export const zoneOf = (order) =>
@@ -981,10 +1091,14 @@ export function orderMatchesSearch(order, search) {
     .trim()
     .toLowerCase();
   if (!term) return true;
-  return [order.id, order.full_name, order.phone, order.group_name].some(
-    (field) =>
-      String(field ?? "")
-        .toLowerCase()
-        .includes(term),
+  return [
+    order.id,
+    order.full_name,
+    order.phone,
+    ...order.lines.map((line) => line.group_name),
+  ].some((field) =>
+    String(field ?? "")
+      .toLowerCase()
+      .includes(term),
   );
 }

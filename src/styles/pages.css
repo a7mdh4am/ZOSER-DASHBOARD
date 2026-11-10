@@ -29,6 +29,25 @@
 }
 
 /* ---------- order detail ---------- */
+.edit-card {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.edit-card-empty {
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+}
+
+.nfc-item {
+  padding: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
@@ -222,6 +241,19 @@
 
 .design-card:hover {
   background: var(--surface-2);
+}
+
+/* A card's colours: one line that scrolls sideways when they don't fit.
+   The padding and matching negative margin put the scrollbar in the card's
+   bottom padding, so it doesn't cover the badges. */
+.badge-scroll {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  margin-bottom: -10px;
+  scrollbar-width: thin;
 }
 
 /* ---------- finance ---------- */

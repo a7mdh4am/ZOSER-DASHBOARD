@@ -20,7 +20,7 @@ import { useToast } from "../context/toast.js";
 import { useAction } from "../hooks/useAction.js";
 import { useApiData } from "../hooks/useApiData.js";
 import { designerApi } from "../lib/api.js";
-import { colorHex, fmtDate, relDay } from "../lib/format.js";
+import { colorHex, countLabel, fmtDate, relDay } from "../lib/format.js";
 
 export default function Designer() {
   const [tab, setTab] = useState("1"); // '1' deposited (to design) | '5' in production
@@ -103,20 +103,22 @@ export default function Designer() {
                   <div style={{ marginTop: 8 }}>
                     <div className="strong">{o.full_name}</div>
                     <div className="small muted">
-                      {o.product_name || "—"} · {o.item_count} card
+                      {o.product_name || "—"} · {o.item_count} item
                       {o.item_count === 1 ? "" : "s"}
                       {o.group_name ? ` · ${o.group_name}` : ""}
                     </div>
                   </div>
                   <div className="row gap-6" style={{ marginTop: 10 }}>
-                    {o.colors.map((c) => (
-                      <Badge
-                        key={c.name}
-                        color={c.hex || colorHex(c.name) || "var(--ink-3)"}
-                      >
-                        {c.name}
-                      </Badge>
-                    ))}
+                    <div className="badge-scroll">
+                      {o.colors.map((c) => (
+                        <Badge
+                          key={c.name}
+                          color={c.hex || colorHex(c.name) || "var(--ink-3)"}
+                        >
+                          {c.name}
+                        </Badge>
+                      ))}
+                    </div>
                     {o.song && <IconMusic />}
                   </div>
                 </div>
@@ -202,14 +204,16 @@ function DesignDetail({ id, onClose, onChanged }) {
           </div>
 
           {/* cards to produce */}
-          {data.items.length > 0 && (
-            <div>
-              <div className="section-label">CARDS ({data.items.length})</div>
-              <OrderItemsGrid items={data.items} nameClassName="copy-line" />
+          {data.lines.map((line) => (
+            <div className="stack" key={line.id}>
+              <div className="section-label">
+                {line.product_name} ·{" "}
+                {countLabel(line.items.length, line.kind).toUpperCase()}
+              </div>
+              <OrderItemsGrid items={line.items} nameClassName="copy-line" />
+              <CustomizationFields order={line} />
             </div>
-          )}
-
-          <CustomizationFields order={order} />
+          ))}
 
           {/* production notes */}
           {data.notes.length > 0 && (

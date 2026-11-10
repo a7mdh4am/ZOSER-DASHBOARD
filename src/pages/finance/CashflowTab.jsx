@@ -12,28 +12,32 @@ import { fmtDate, money } from "../../lib/format.js";
 import { SectionShell } from "./parts.jsx";
 import { shortMoney, sectionCache, useSection } from "./shared.js";
 
+const EMPTY_ENTRY = {
+  type: "expense",
+  category: "",
+  value: "",
+  description: "",
+  orderId: "",
+};
+
 export function CashflowTab({ filters }) {
   const hook = useSection("cashflow", filters);
   const toast = useToast();
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({
-    type: "expense",
-    value: "",
-    description: "",
-    orderId: "",
-  });
+  const [form, setForm] = useState(EMPTY_ENTRY);
 
   const [submit, recording] = useAction(async () => {
     try {
       await financeApi.addEntry({
         type: form.type,
+        category: form.category,
         value: Number(form.value),
         description: form.description,
         orderId: form.orderId ? Number(form.orderId) : undefined,
       });
       toast("Entry recorded");
       setAdding(false);
-      setForm({ type: "expense", value: "", description: "", orderId: "" });
+      setForm(EMPTY_ENTRY);
       sectionCache.clear();
       hook.reload();
     } catch (e) {
@@ -130,6 +134,7 @@ export function CashflowTab({ filters }) {
                     <tr>
                       <th>Date</th>
                       <th>Description</th>
+                      <th>Category</th>
                       <th>Type</th>
                       <th>Order</th>
                       <th className="num">Amount</th>
@@ -140,6 +145,7 @@ export function CashflowTab({ filters }) {
                       <tr key={e.id}>
                         <td className="small muted">{fmtDate(e.created_at)}</td>
                         <td>{e.description}</td>
+                        <td>{e.category}</td>
                         <td>
                           <Badge
                             color={
@@ -185,6 +191,7 @@ export function CashflowTab({ filters }) {
                       onClick={submit}
                       disabled={
                         recording ||
+                        !form.category ||
                         !form.value ||
                         Number(form.value) <= 0 ||
                         !form.description.trim()
@@ -201,7 +208,9 @@ export function CashflowTab({ filters }) {
                     <Segmented
                       fill
                       value={form.type}
-                      onChange={(type) => setForm({ ...form, type })}
+                      onChange={(type) =>
+                        setForm({ ...form, type, category: "" })
+                      }
                       options={[
                         ["expense", "Expense"],
                         ["income", "Income"],
@@ -211,6 +220,25 @@ export function CashflowTab({ filters }) {
                       Deposits are recorded from the order page; refunds are set
                       via an order's payment status.
                     </span>
+                  </label>
+                  <label className="field">
+                    <span>Category</span>
+                    <select
+                      className="input"
+                      value={form.category}
+                      onChange={(e) =>
+                        setForm({ ...form, category: e.target.value })
+                      }
+                    >
+                      <option value="" disabled>
+                        Choose a category
+                      </option>
+                      {d.categories[form.type].map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="field">
                     <span>Amount (EGP)</span>
@@ -233,7 +261,7 @@ export function CashflowTab({ filters }) {
                       onChange={(e) =>
                         setForm({ ...form, description: e.target.value })
                       }
-                      placeholder="e.g. Meta ads, packaging restock"
+                      placeholder="e.g. October salaries, J&T collection"
                     />
                   </label>
                   <label className="field">

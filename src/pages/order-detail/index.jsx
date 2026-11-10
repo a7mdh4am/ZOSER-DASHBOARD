@@ -1,5 +1,5 @@
-// One order: payment, cards, customization and notes on the left; status,
-// profile, shipments and customer on the right.
+// One order: payment, order items and notes on the left; status, NFC links,
+// shipments and customer on the right.
 
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -9,8 +9,7 @@ import { useApiData } from "../../hooks/useApiData.js";
 import { ordersApi } from "../../lib/api.js";
 import { fmtDate } from "../../lib/format.js";
 import { CustomerCard } from "./CustomerCard.jsx";
-import { CustomizationCard } from "./CustomizationCard.jsx";
-import { ItemsCard } from "./ItemsCard.jsx";
+import { LineCard } from "./LineCard.jsx";
 import { NotesCard } from "./NotesCard.jsx";
 import { PaymentCard } from "./PaymentCard.jsx";
 import { ProfileCard } from "./ProfileCard.jsx";
@@ -34,16 +33,12 @@ export default function OrderDetail() {
   if (error) return <Empty title="Couldn't load this order" hint={error} />;
   if (!data) return <PageLoader />;
 
-  const {
-    order,
-    items,
-    extras,
-    deposits,
-    financial,
-    shipments,
-    notes,
-    profile,
-  } = data;
+  const { order, lines, deposits, financial, shipments, notes, profiles } =
+    data;
+  const lineTitle = (line) =>
+    lines.length > 1
+      ? `Item ${lines.indexOf(line) + 1} · ${line.product_name}`
+      : line.product_name;
   const hasActiveShipment = shipments.some((s) => s.status === "active");
 
   return (
@@ -70,14 +65,17 @@ export default function OrderDetail() {
             deposits={deposits}
             onChanged={load}
           />
-          <ItemsCard items={items} extras={extras} />
-          <CustomizationCard
-            order={order}
-            items={items}
-            products={data.edit_products}
-            cardCount={data.card_count}
-            onChanged={load}
-          />
+          {lines.map((line) => (
+            <LineCard
+              key={line.id}
+              orderId={order.id}
+              line={line}
+              title={lineTitle(line)}
+              products={data.edit_products}
+              extraOptions={data.edit_extras}
+              onChanged={load}
+            />
+          ))}
           <NotesCard orderId={order.id} notes={notes} onChanged={load} />
         </div>
 
@@ -85,7 +83,13 @@ export default function OrderDetail() {
         <div className="stack">
           {/* Keyed by status: after a change it starts over on the saved status. */}
           <StatusCard key={order.status} order={order} onChanged={load} />
-          <ProfileCard orderId={order.id} profile={profile} onChanged={load} />
+          <ProfileCard
+            orderId={order.id}
+            lines={lines}
+            lineTitle={lineTitle}
+            profiles={profiles}
+            onChanged={load}
+          />
 
           <div className="card">
             <div className="card-head">

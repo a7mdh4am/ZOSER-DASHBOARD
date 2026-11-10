@@ -17,6 +17,8 @@ import {
   orderMatchesSearch,
   paidOf,
   paymentStatus,
+  lineSubtotal,
+  productNames,
   productOf,
   round2,
   sum,
@@ -28,8 +30,35 @@ const { PENDING, DEPOSITED, PRODUCTION, SHIPPED, SHIPPED_PAID, CANCELLED } =
 
 const isLive = (order) => order.status !== CANCELLED;
 const netOf = (order) => order.subtotal - order.discount_amount;
-const cardCount = (order) => order.cards.length;
 const countWhere = (list, test) => list.filter(test).length;
+
+/**
+ * Every order item in `orders` with the money that belongs to it. A coupon
+ * comes off the whole order, so each item carries its share of the discount.
+ * `productId` keeps only that product's items, for per-product breakdowns.
+ */
+const lineSales = (orders, productId) =>
+  orders
+    .flatMap((order) =>
+      order.lines.map((line) => {
+        const gross = lineSubtotal(line);
+        const discount = order.subtotal
+          ? (order.discount_amount * gross) / order.subtotal
+          : 0;
+        return {
+          order,
+          line,
+          product: productOf(line),
+          units: line.items.length,
+          gross,
+          net: round2(gross - discount),
+        };
+      }),
+    )
+    .filter((s) => !productId || String(s.line.product_id) === productId);
+
+const costOf = (sales) =>
+  sum(sales, (s) => (s.product?.unit_cost ?? 0) * s.units);
 
 function groupBy(list, keyOf) {
   const groups = new Map();
@@ -69,7 +98,8 @@ function inDateRange(iso, query) {
 
 const matchesFilters = (order, query) =>
   (!query.status || String(order.status) === query.status) &&
-  (!query.productId || String(order.product_id) === query.productId) &&
+  (!query.productId ||
+    order.lines.some((l) => String(l.product_id) === query.productId)) &&
   (!query.cityId || String(order.city_id) === query.cityId);
 
 const ordersFor = (query) =>
@@ -93,8 +123,8 @@ const refundsFor = (query) =>
 function profitFigures(query) {
   const live = ordersFor(query).filter(isLive);
   const net_revenue = sum(live, netOf);
-  const priced = live.filter((o) => productOf(o)?.unit_cost != null);
-  const cogs = sum(priced, (o) => productOf(o).unit_cost * cardCount(o));
+  const sales = lineSales(live);
+  const cogs = costOf(sales);
   const expenses = sum(
     ledgerFor(query).filter((e) => e.type === "expense"),
     (e) => e.value,
@@ -105,8 +135,8 @@ function profitFigures(query) {
     net_revenue,
     cogs,
     units_missing_cost: sum(
-      live.filter((o) => productOf(o)?.unit_cost == null),
-      cardCount,
+      sales.filter((s) => s.product?.unit_cost == null),
+      (s) => s.units,
     ),
     gross_profit: round2(net_revenue - cogs),
     expenses,
@@ -162,10 +192,10 @@ export function dashboard() {
     status_breakdown: [...groupBy(db.orders, (o) => o.status)].map(
       ([status, orders]) => ({ status, order_count: orders.length }),
     ),
-    product_performance: [...groupBy(live, (o) => productOf(o)?.name)]
-      .map(([product_name, orders]) => ({
+    product_performance: [...groupBy(lineSales(live), (s) => s.product?.name)]
+      .map(([product_name, sales]) => ({
         product_name,
-        total_revenue: sum(orders, (o) => o.subtotal),
+        total_revenue: sum(sales, (s) => s.gross),
       }))
       .sort((a, b) => b.total_revenue - a.total_revenue),
     recent_orders: [...db.orders]
@@ -175,7 +205,7 @@ export function dashboard() {
         id: o.id,
         order_time: o.order_time,
         full_name: o.full_name,
-        product_name: productOf(o)?.name ?? null,
+        product_name: productNames(o),
         status: o.status,
         net_total: o.grand_total,
       })),
@@ -268,7 +298,11 @@ function overview(query) {
     }),
     alerts,
     breakdowns: {
-      by_product: netByName(groupBy(live, (o) => productOf(o)?.name)),
+      by_product: [
+        ...groupBy(lineSales(live, query.productId), (s) => s.product?.name),
+      ]
+        .map(([name, sales]) => ({ name, net: sum(sales, (s) => s.net) }))
+        .sort((a, b) => b.net - a.net),
       by_city: netByName(groupBy(live, (o) => cityOf(o)?.name ?? null)),
       by_status: [...groupBy(orders, (o) => o.status)].map(
         ([status, rows]) => ({ status, orders: rows.length }),
@@ -279,20 +313,24 @@ function overview(query) {
 
 function products(query) {
   const live = ordersFor(query).filter(isLive);
-  const byProduct = groupBy(live, (o) => o.product_id);
+  const byProduct = groupBy(
+    lineSales(live, query.productId),
+    (s) => s.line.product_id,
+  );
 
   const performance = [...byProduct]
     .map(([productId, rows]) => {
       const product = db.products.find((p) => p.id === productId);
-      const net = sum(rows, netOf);
-      const cards = sum(rows, cardCount);
+      const net = round2(sum(rows, (s) => s.net));
+      const cards = sum(rows, (s) => s.units);
+      const orders = new Set(rows.map((s) => s.order.id)).size;
       return {
         id: product.id,
         name: product.name,
-        orders: rows.length,
+        orders,
         cards,
         net,
-        avg_net: round2(net / rows.length),
+        avg_net: round2(net / orders),
         profit:
           product.unit_cost == null
             ? null
@@ -449,8 +487,7 @@ function refunds(query) {
       .slice(0, 20)
       .map((r) => ({
         ...r,
-        product_name:
-          productOf(db.orders.find((o) => o.id === r.order_id))?.name ?? null,
+        product_name: productNames(db.orders.find((o) => o.id === r.order_id)),
       })),
   };
 }
@@ -476,7 +513,7 @@ function profit(query) {
       return {
         period,
         net: sum(rows, netOf),
-        cogs: sum(rows, (o) => (productOf(o)?.unit_cost ?? 0) * cardCount(o)),
+        cogs: costOf(lineSales(rows)),
         expenses: sum(expenses.get(period) ?? [], (e) => e.value),
         refunds: sum(refundRows.get(period) ?? [], (r) => r.value),
       };
@@ -503,6 +540,7 @@ function cashflow(query) {
 
   let running = opening_balance;
   return {
+    categories: db.ledgerCategories,
     opening_balance,
     months: [...byMonth.keys()].sort().map((period) => {
       const rows = byMonth.get(period);
@@ -556,7 +594,7 @@ export function financeOrderRows(query) {
         id: o.id,
         order_time: o.order_time,
         full_name: o.full_name,
-        product_name: productOf(o)?.name ?? null,
+        product_name: productNames(o),
         city: cityOf(o)?.name ?? null,
         status: o.status,
         price: o.subtotal,
