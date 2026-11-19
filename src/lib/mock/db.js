@@ -170,12 +170,13 @@ const ROLES = [
   [
     "CARD_PROVISIONER",
     "Card Provisioner",
-    "Creates customer accounts and order profiles, and manages NFC items",
+    "Creates order pages and their links, and manages NFC items and members",
     [
       "orders.view",
       "customers.view",
       "profiles.create",
       "profiles.items.manage",
+      "profiles.participants.manage",
     ],
   ],
   [
@@ -646,6 +647,7 @@ const REFUNDS = [];
 const USERS = [];
 const PROFILES = [];
 const NFC_ITEMS = [];
+const OPENS = [];
 
 // One order item, shaped like a line of the shop's cart: a design, how many of
 // it, and what the customer asked for on it. `price` is the whole item's price
@@ -695,54 +697,115 @@ export const newItemCode = () =>
     () => CODE_LETTERS[int(0, CODE_LETTERS.length - 1)],
   ).join("");
 
-export function newNfcItem(profileId, cardId, label, createdAt) {
+// One physical item (a card, keychain or necklace) and the link programmed on it. It
+// belongs to its order's page (a profile), not to a person: any of the page's items
+// opens it, whichever is tapped. holder_user_id: the member who has it, only to know
+// (set when they join from it, answer "Is it yours?" on a first tap, or by staff); it
+// never decides who may see or change the page. status "off": its link says so.
+export function newNfcItem(profileId, cardId, kind, label, createdAt) {
   const item = {
     id: nextId(),
     code: newItemCode(),
     profile_id: profileId,
     card_id: cardId, // null for an extra item added by staff
-    label, // only extra items have one; a card shows its own name
-    status: "active", // or "blocked"
-    owner_user_id: null,
-    connected_at: null,
+    kind, // "card", "keychain", "necklace" or "bracelet"
+    label, // the name on it, from the order (a card's), or staff's for an extra one
+    status: "on", // or "off"
+    turned_off_by: null, // "staff", or a member's user id
+    turned_off_at: null,
+    holder_user_id: null,
+    holder_how: null, // "joined", "answered" or "changed"
+    holder_at: null,
     created_at: createdAt,
   };
   NFC_ITEMS.push(item);
   return item;
 }
 
-// One order item gets one shared profile, and one link per physical item in it.
-export function addProfile(order, line, createdAt) {
+const kindOf = (line) =>
+  CATALOG.find((p) => p.id === line.product_id)?.product_types.code ===
+  "KEYCHAIN"
+    ? "keychain"
+    : "card";
+
+// One order gets one page (profile), and one link per physical item in it, cards and
+// keychains alike: 2 cards and 2 keychains make 1 page and 4 links. seats: how many
+// people it's for, the most items any order item has (2 at least: a necklace for one
+// is for her and whoever gave it). names and since come from the order, so the page
+// opens already filled in. state: "ready", "closed" (its last member left) or, with
+// no members yet and the order not shipped, still claimable only once it ships (the
+// customer API checks the order's status for that)
+export function addProfile(order, createdAt) {
+  const first = order.lines[0];
   const profile = {
     id: nextId(),
-    pid: `p${line.id}`,
+    pid: `p${order.id}`,
     order_id: order.id,
-    line_id: line.id,
+    seats: Math.max(2, ...order.lines.map((line) => line.items.length)),
+    names: first.items.map((card) => card.name),
+    since: order.lines.find((line) => line.date)?.date ?? null,
+    state: "ready",
+    legacy: false,
+    member_ids: [], // in the order they joined
+    joined_at: {}, // user id → when
+    requests: [], // [{ user_id, item_id, at }]: asked to join, waiting for a member
+    pin: null, // 4 digits visitors type first, or null
     theme_ids: [],
     created_at: createdAt,
+    claimed_at: null,
   };
   PROFILES.push(profile);
-  const items = line.items.map((card) =>
-    newNfcItem(profile.id, card.id, null, createdAt),
+  const items = order.lines.flatMap((line) =>
+    line.items.map((card) =>
+      newNfcItem(profile.id, card.id, kindOf(line), card.name, createdAt),
+    ),
   );
   return { profile, items };
 }
 
-const seedOwner = (item, card, line, profile, ms) => {
+// A customer account, as the profiles app makes them (they sign up themselves)
+function newCustomer(name, ms) {
   const user = {
     id: nextId(),
-    username: `${card.name.toLowerCase()}.${item.id}`,
-    name: card.name,
-    friends_count: line.items.length,
+    username: `${name.toLowerCase()}.${int(10, 999)}`,
+    name,
+    friends_count: null, // the old system's; pages have seats instead
     is_blocked: false,
-    pid: profile.pid,
+    pid: null, // the old system's single profile link; pages are found by member
     theme_ids: [],
     created_at: isoAt(ms),
   };
   USERS.push(user);
-  item.owner_user_id = user.id;
-  item.connected_at = isoAt(ms);
+  return user;
+}
+
+export const addMember = (profile, user, at) => {
+  profile.member_ids.push(user.id);
+  profile.joined_at[user.id] = at;
+  profile.claimed_at ??= at;
 };
+
+export const setHolder = (item, user, how, at) => {
+  item.holder_user_id = user?.id ?? null;
+  item.holder_how = user ? how : null;
+  item.holder_at = user ? at : null;
+};
+
+// Taps of an item: when, by a member or a visitor, and from the chip or the box card's
+// QR code. A device's taps within half an hour count once (the customer API does that)
+export function addOpens(item, profile, count, fromMs) {
+  for (let i = 0; i < count; i++) {
+    const ms = fromMs + rand() * (Date.now() - fromMs);
+    const member = profile.member_ids.length > 0 && chance(0.55);
+    OPENS.push({
+      id: nextId(),
+      item_id: item.id,
+      at: isoAt(ms),
+      user_id: member ? pick(profile.member_ids) : null,
+      source: chance(0.08) ? "qr" : "tap",
+    });
+  }
+}
 
 const addDeposit = (order, value, ms, description) =>
   LEDGER.push({
@@ -885,43 +948,104 @@ for (let i = 0; i < ORDER_COUNT; i++) {
       ? chance(0.85)
       : status === PRODUCTION && chance(0.3);
   if (hasProfile) {
-    for (const line of order.lines) {
-      const { profile, items } = addProfile(order, line, order.order_time);
-      if (chance(0.25)) profile.theme_ids.push(pick(CUSTOM_THEMES).id);
-      // Delivered items have mostly been scanned; a few were blocked since.
-      if (status !== SHIPPED_PAID) continue;
-      for (const item of items) {
-        const card = line.items.find((c) => c.id === item.card_id);
-        if (chance(0.7)) seedOwner(item, card, line, profile, deliveredAt);
-        if (chance(0.06)) item.status = "blocked";
+    const { profile, items } = addProfile(order, order.order_time);
+    if (chance(0.25)) profile.theme_ids.push(pick(CUSTOM_THEMES).id);
+    // Delivered pages have mostly been set up: by whoever tapped first, then the other
+    // joined (asked from their own card, or by invite). A few are still waiting on a
+    // request, a few have a PIN, and a few items were turned off since (lost)
+    if (status === SHIPPED_PAID && chance(0.8)) {
+      const [firstItem, secondItem] = items;
+      const setUp = deliveredAt + int(1, 48) * HOUR_MS;
+      const founder = newCustomer(firstItem.label, setUp);
+      addMember(profile, founder, isoAt(setUp));
+      if (chance(0.85)) setHolder(firstItem, founder, "answered", isoAt(setUp));
+      if (secondItem) {
+        const joinedAt = setUp + int(1, 72) * HOUR_MS;
+        const partner = newCustomer(secondItem.label, joinedAt);
+        if (chance(0.75)) {
+          addMember(profile, partner, isoAt(joinedAt));
+          setHolder(secondItem, partner, "joined", isoAt(joinedAt));
+        } else if (chance(0.4)) {
+          profile.requests.push({
+            user_id: partner.id,
+            item_id: secondItem.id,
+            at: isoAt(joinedAt),
+          });
+        }
       }
+      if (chance(0.15)) profile.pin = String(int(1000, 9999));
+      for (const item of items) {
+        addOpens(item, profile, int(2, 40), setUp);
+        if (chance(0.05)) {
+          item.status = "off";
+          item.turned_off_by = pick(profile.member_ids);
+          item.turned_off_at = isoAt(setUp + int(5, 60) * DAY_MS);
+        }
+      }
+      if (chance(0.03)) profile.state = "closed";
+    } else if (status === SHIPPED_PAID || status === SHIPPED) {
+      // Not set up yet: maybe someone tapped it (and only looked)
+      for (const item of items)
+        if (chance(0.3)) addOpens(item, profile, int(1, 3), deliveredAt);
     }
   }
 }
 
-// Accounts not tied to an order: custom cards, and one with no profile linked yet.
-USERS.push(
-  {
+// Accounts not tied to an order. sara.youssef is the old system's kind: one login shared
+// by a couple, printed in the box, with one profile link (pid). Moved to pages, it's a
+// "legacy" page with that one member until one of them makes the login theirs and
+// invites the other (the profiles app's SharedLogin). no.profile is in no page yet.
+const legacyUser = {
+  id: nextId(),
+  username: "sara.youssef",
+  name: "Sara & Youssef",
+  friends_count: 2,
+  is_blocked: false,
+  pid: "p-custom-1",
+  theme_ids: [CUSTOM_THEMES[0].id],
+  created_at: daysAgoIso(400),
+};
+USERS.push(legacyUser, {
+  id: nextId(),
+  username: "no.profile",
+  name: "Account Without Profile",
+  friends_count: 1,
+  is_blocked: false,
+  pid: null,
+  theme_ids: [],
+  created_at: daysAgoIso(12),
+});
+{
+  const legacy = {
     id: nextId(),
-    username: "sara.youssef",
-    name: "Sara & Youssef",
-    friends_count: 2,
-    is_blocked: false,
-    pid: "p-custom-1",
+    pid: legacyUser.pid,
+    order_id: null,
+    seats: 2,
+    names: ["Sara", "Youssef"],
+    since: "2018-05-20",
+    state: "ready",
+    legacy: true,
+    member_ids: [],
+    joined_at: {},
+    requests: [],
+    pin: null,
     theme_ids: [CUSTOM_THEMES[0].id],
-    created_at: daysAgoIso(40),
-  },
-  {
-    id: nextId(),
-    username: "no.profile",
-    name: "Account Without Profile",
-    friends_count: 1,
-    is_blocked: false,
-    pid: null,
-    theme_ids: [],
-    created_at: daysAgoIso(12),
-  },
-);
+    created_at: legacyUser.created_at,
+    claimed_at: null,
+  };
+  PROFILES.push(legacy);
+  addMember(legacy, legacyUser, legacyUser.created_at);
+  for (const label of [null, null]) {
+    const item = newNfcItem(
+      legacy.id,
+      null,
+      "card",
+      label,
+      legacyUser.created_at,
+    );
+    addOpens(item, legacy, int(20, 60), Date.now() - 300 * DAY_MS);
+  }
+}
 
 // Monthly running costs and the odd bit of other income, for Profit and Cash flow.
 for (let month = 0; month < 8; month++) {
@@ -1055,6 +1179,7 @@ export const db = {
   users: USERS,
   profiles: PROFILES,
   nfcItems: NFC_ITEMS,
+  opens: OPENS,
   extraOptions: EXTRAS,
   activity: ACTIVITY,
   sessions: SESSIONS,

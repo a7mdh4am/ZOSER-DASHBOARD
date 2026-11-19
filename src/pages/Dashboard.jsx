@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AreaChart, BarList, StatCard } from "../components/charts.jsx";
+import { ReturnsTable } from "../components/returns.jsx";
+import { useAuth } from "../context/auth.js";
 import {
   Empty,
   OrderLink,
@@ -10,7 +12,7 @@ import {
 } from "../components/ui.jsx";
 import { IconRefresh } from "../components/Icons.jsx";
 import { useApiData } from "../hooks/useApiData.js";
-import { dashboardApi } from "../lib/api.js";
+import { dashboardApi, returnsApi } from "../lib/api.js";
 import { localISODate } from "../lib/dates.js";
 import { fmtDate, money, statusOf, STATUS_ORDER } from "../lib/format.js";
 
@@ -32,7 +34,15 @@ function pctDelta(now, prev) {
 export default function Dashboard() {
   const [metric, setMetric] = useState("revenue");
   const navigate = useNavigate();
+  const { can } = useAuth();
   const { data, error, reload } = useApiData(() => dashboardApi.get(), []);
+  // The latest returned parcels, for staff who can see orders
+  const showReturns = can("orders.view");
+  const returns = useApiData(
+    () =>
+      showReturns ? returnsApi.list({ limit: "5" }) : Promise.resolve(null),
+    [showReturns],
+  );
 
   const series = useMemo(() => {
     if (!data) return [];
@@ -101,6 +111,31 @@ export default function Dashboard() {
           deltaLabel={`${s.shipped_orders} shipped · ${s.pending_orders} pending`}
         />
       </div>
+
+      {showReturns && returns.data && (
+        <div className="card">
+          <div className="card-head">
+            <h3>Returned orders</h3>
+            {returns.data.total > 0 && (
+              <span className="small muted">{returns.data.total}</span>
+            )}
+            <div className="grow" />
+            <button
+              className="btn sm ghost"
+              onClick={() => navigate("/returns")}
+            >
+              View all
+            </button>
+          </div>
+          {returns.data.returns.length ? (
+            <ReturnsTable rows={returns.data.returns} compact />
+          ) : (
+            <div className="card-body">
+              <Empty title="No returned orders" />
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card">
         <div className="card-head">

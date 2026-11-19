@@ -7,6 +7,7 @@ import {
 } from "../components/order.jsx";
 import {
   Badge,
+  Can,
   Empty,
   Modal,
   PageLoader,
@@ -19,7 +20,7 @@ import {
 import { useToast } from "../context/toast.js";
 import { useAction } from "../hooks/useAction.js";
 import { useApiData } from "../hooks/useApiData.js";
-import { designerApi } from "../lib/api.js";
+import { designerApi, nfcApi, productionApi } from "../lib/api.js";
 import { colorHex, countLabel, fmtDate, relDay } from "../lib/format.js";
 
 export default function Designer() {
@@ -27,6 +28,7 @@ export default function Designer() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState(null);
+  const [sheet, setSheet] = useState(false);
 
   const { data, error, loading, reload } = useApiData(
     () => designerApi.list({ status: tab, search, page: String(page) }),
@@ -48,6 +50,11 @@ export default function Designer() {
             ["5", `In production${data ? ` · ${data.counts.production}` : ""}`],
           ]}
         />
+        <Can perm="nfc.provision">
+          <button className="btn sm" onClick={() => setSheet(true)}>
+            Programming sheet
+          </button>
+        </Can>
         <div className="grow" style={{ minWidth: 200, maxWidth: 380 }}>
           <SearchInput
             value={search}
@@ -146,6 +153,7 @@ export default function Designer() {
           }}
         />
       )}
+      {sheet && <ProgrammingSheet onClose={() => setSheet(false)} />}
     </div>
   );
 }
@@ -250,6 +258,103 @@ function DesignDetail({ id, onClose, onChanged }) {
             </span>
             <PhoneActions phone={order.phone} />
           </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/**
+ * Every chip to program for the orders in production: who it's for, and the link to
+ * write on it (and the QR's). Download it (CSV, safe to open in Excel) or print it, and
+ * tick each one off once its chip reads back right.
+ */
+function ProgrammingSheet({ onClose }) {
+  const toast = useToast();
+  const { data, error, reload } = useApiData(() => productionApi.sheet(), []);
+  const [download, downloading] = useAction(async () => {
+    try {
+      const blob = await productionApi.sheetCsv();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "programming-sheet.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
+  const [print, printing] = useAction(async () => {
+    try {
+      const blob = await productionApi.sheetPrint();
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
+  const [mark, marking] = useAction(async (row) => {
+    try {
+      await nfcApi.programmed(row.item_id);
+      reload();
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
+
+  return (
+    <Modal
+      title="Programming sheet"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Close
+          </button>
+          <button className="btn" onClick={print} disabled={printing}>
+            Print
+          </button>
+          <button
+            className="btn primary"
+            onClick={download}
+            disabled={downloading}
+          >
+            {downloading ? "Downloading…" : "Download CSV"}
+          </button>
+        </>
+      }
+    >
+      {error && <div className="small text-danger">{error}</div>}
+      {data && !data.rows.length && (
+        <div className="small muted">
+          No chips to program: move a deposited order to production first.
+        </div>
+      )}
+      {data && data.rows.length > 0 && (
+        <div className="stack gap-6">
+          {data.rows.map((row) => (
+            <div key={row.item_id} className="row wrap gap-8 small">
+              <span className="mono">{row.order}</span>
+              <span className="strong">{row.for}</span>
+              <span className="muted">
+                {row.product} {row.color}
+              </span>
+              <span className="mono grow" style={{ wordBreak: "break-all" }}>
+                {row.chip_url}
+              </span>
+              {row.programmed ? (
+                <Badge color="var(--st-shipped)">Done</Badge>
+              ) : (
+                <button
+                  className="btn sm"
+                  disabled={marking}
+                  onClick={() => mark(row)}
+                >
+                  Done
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </Modal>

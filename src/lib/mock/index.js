@@ -23,6 +23,7 @@ import {
   newItemCode,
   newNfcItem,
   nextId,
+  setHolder,
   nowIso,
   ORDER_STATUS,
   orderMatchesSearch,
@@ -183,19 +184,23 @@ const publicAdmin = (staff) => ({
   roleName: roleOf(staff)?.name ?? staff.role,
 });
 
-on("GET", "/auth/me", () => {
-  const staff = currentStaff();
-  return {
-    admin: staff
-      ? { ...publicAdmin(staff), permissions: roleOf(staff)?.permissions ?? [] }
-      : null,
-    csrfToken: "dummy-csrf-token",
-  };
+const withPermissions = (staff) => ({
+  ...publicAdmin(staff),
+  permissions: roleOf(staff)?.permissions ?? [],
 });
 
+on("GET", "/auth/me", () => {
+  const staff = currentStaff();
+  return { admin: staff ? withPermissions(staff) : null };
+});
+
+// Like the API: a new access token while "signed in" (the session kept in localStorage
+// stands for the refresh cookie), or nulls
 on("POST", "/auth/refresh", () => {
-  if (!currentStaff()) throw new MockError(401, "No refresh token");
-  return { refreshed: true };
+  const staff = currentStaff();
+  return staff
+    ? { accessToken: "dummy-access-token", admin: withPermissions(staff) }
+    : { accessToken: null, admin: null };
 });
 
 on("POST", "/auth/login", ({ body }) => {
@@ -205,7 +210,7 @@ on("POST", "/auth/login", ({ body }) => {
   if (staff.isBlocked)
     throw new MockError(403, "This account has been deactivated");
   setSessionUsername(staff.username);
-  return { admin: publicAdmin(staff) };
+  return { admin: withPermissions(staff), accessToken: "dummy-access-token" };
 });
 
 on("POST", "/auth/logout", () => {
@@ -255,52 +260,162 @@ const lineRow = (line) => ({
   kind: lineKind(line),
 });
 
-function nfcItemRow(item, line) {
-  const card = line.items.find((c) => c.id === item.card_id);
-  const owner = db.users.find((u) => u.id === item.owner_user_id);
+const userRow = (id) => {
+  const user = db.users.find((u) => u.id === id);
+  return user
+    ? { id: user.id, username: user.username, name: user.name }
+    : null;
+};
+
+// How often an item opened its page: by the page's members, by visitors, and when last
+function opensOf(item) {
+  const opens = db.opens.filter((open) => open.item_id === item.id);
+  return {
+    total: opens.length,
+    members: opens.filter((open) => open.user_id != null).length,
+    visitors: opens.filter((open) => open.user_id == null).length,
+    last_at:
+      opens.reduce((last, open) => (open.at > last ? open.at : last), "") ||
+      null,
+  };
+}
+
+function nfcItemRow(item) {
+  const offBy = item.turned_off_by;
   return {
     id: item.id,
-    label: card?.name ?? item.label,
-    kind: lineKind(line),
-    is_extra: !card,
+    label: item.label,
+    kind: item.kind,
+    is_extra: !item.card_id,
     link: `${NFC_LINK_BASE_URL}/${item.code}`,
     status: item.status,
-    owner: owner
-      ? { id: owner.id, username: owner.username, name: owner.name }
-      : null,
-    connected_at: item.connected_at,
+    turned_off_by:
+      offBy === "staff" ? "staff" : (userRow(offBy)?.username ?? null),
+    turned_off_at: item.turned_off_at,
+    holder: userRow(item.holder_user_id),
+    holder_how: item.holder_how,
+    holder_at: item.holder_at,
+    opens: opensOf(item),
     created_at: item.created_at,
   };
 }
 
-const profileRow = (order, profile) => {
-  const line = order.lines.find((l) => l.id === profile.line_id);
+// A page in the API's shape (backend admin/profiles.ts profileRow): its people (each a
+// place named at checkout, joined or still waiting), its items (whose, and who claimed
+// them), opens and themes. The dummy pages keep their older model underneath; this is
+// read-only here: the dummy API doesn't act on people or items
+function profileRow(profile) {
+  const members = profile.member_ids.map((id) => userRow(id)).filter(Boolean);
+  const people = [
+    ...members.map((user, i) => ({
+      id: profile.id * 100 + i,
+      role: "person",
+      state: "active",
+      display_name: profile.names[i] ?? user.name ?? user.username,
+      checkout_name: profile.names[i] ?? user.name ?? user.username,
+      position: i,
+      origin: "order",
+      account: user,
+      claimed_at: profile.joined_at[user.id] ?? null,
+      hold_expires_at: null,
+      has_voice: false,
+      user_id: user.id,
+    })),
+    ...profile.names.slice(members.length).map((name, i) => ({
+      id: profile.id * 100 + members.length + i,
+      role: "person",
+      state: "pending",
+      display_name: name,
+      checkout_name: name,
+      position: members.length + i,
+      origin: "order",
+      account: null,
+      claimed_at: null,
+      hold_expires_at: null,
+      has_voice: false,
+      user_id: null,
+    })),
+  ];
+  const names = people.map((p) => p.display_name);
+  const items = db.nfcItems
+    .filter((item) => item.profile_id === profile.id)
+    .map((item) => {
+      const row = nfcItemRow(item);
+      const person =
+        people.find((p) => p.user_id && p.user_id === item.holder_user_id) ??
+        people.find((p) => p.display_name === item.label) ??
+        null;
+      return {
+        id: row.id,
+        code: item.code,
+        link: row.link,
+        kind: row.kind,
+        label: row.label,
+        state: row.status === "on" ? "active" : "off",
+        order_id: profile.order_id,
+        assigned_participant_id: person?.id ?? null,
+        assigned_to: person?.display_name ?? null,
+        owner: row.holder,
+        claimed_at: row.holder_at,
+        programmed_at: row.created_at,
+        replaced_by_id: null,
+        turned_off_by: row.turned_off_by,
+        turned_off_at: row.turned_off_at,
+        opens: row.opens,
+        created_at: row.created_at,
+      };
+    });
   return {
     id: profile.id,
-    pid: profile.pid,
-    line_id: profile.line_id,
+    public_id: profile.pid,
+    type: profile.seats > 2 ? "friends" : "couple",
+    state:
+      profile.state === "closed"
+        ? "closed"
+        : members.length
+          ? "live"
+          : "waiting",
+    since: profile.since,
+    theme: "rose",
+    order_ids: profile.order_id ? [profile.order_id] : [],
+    legacy: profile.legacy,
+    legacy_uid: profile.legacy ? profile.pid : null,
+    merged_into_id: null,
+    names: [names.slice(0, -1).join(", "), names.at(-1)]
+      .filter(Boolean)
+      .join(" & "),
+    has_pin: Boolean(profile.pin),
+    created_at: profile.created_at,
+    first_claim_at: profile.claimed_at,
+    participants: people.map((p) => {
+      const copy = { ...p };
+      delete copy.user_id;
+      return copy;
+    }),
+    items,
     themes: themeStatuses(profile),
-    items: db.nfcItems
-      .filter((item) => item.profile_id === profile.id)
-      .map((item) => nfcItemRow(item, line)),
+    claim_log: [],
   };
-};
+}
 
 const profilesOf = (order) =>
-  db.profiles
-    .filter((p) => p.order_id === order.id)
-    .map((p) => profileRow(order, p));
+  db.profiles.filter((p) => p.order_id === order.id).map(profileRow);
 
-// An NFC item, with the order item and order it belongs to.
+// An NFC item, with its page and (for a page from an order) the order
 function findNfcItem(id) {
   const item = findOr404(db.nfcItems, id, "NFC item");
   const profile = db.profiles.find((p) => p.id === item.profile_id);
-  const order = db.orders.find((o) => o.id === profile.order_id);
-  const line = order.lines.find((l) => l.id === profile.line_id);
-  return { item, profile, order, line };
+  return { item, profile, entityId: profile.order_id ?? profile.pid };
 }
 
-const nfcItemName = ({ item, line }) => nfcItemRow(item, line).label;
+const itemName = (item) =>
+  item.label ? `${item.label}'s ${item.kind}` : `Unnamed ${item.kind}`;
+
+// Activity on a page goes on its order (or, for an old-system page, the page itself)
+const logPage = (action, profile, details) =>
+  profile.order_id
+    ? logActivity(action, "order", profile.order_id, details)
+    : logActivity(action, "profile", profile.pid, details);
 
 const noteRows = (order) =>
   [...order.production_notes].sort(newestFirst).map((note) => ({
@@ -356,6 +471,14 @@ on("GET", "/orders/:id", ({ params }) => {
       city_id: order.city_id,
       zone_id: order.zone_id,
       product_name: productNames(order),
+      // The dummy pages' items count as the chips' codes
+      provisioned_at: db.nfcItems.some((item) =>
+        db.profiles.some(
+          (p) => p.id === item.profile_id && p.order_id === order.id,
+        ),
+      )
+        ? order.order_time
+        : null,
     },
     lines: order.lines.map(lineRow),
     deposits: depositsOf(order)
@@ -402,12 +525,35 @@ on("POST", "/orders/:id/deposits", ({ params, body }) => {
     created_at: nowIso(),
   };
   db.ledger.push(entry);
-  return entry;
+  // The first deposit on a Pending order makes it Deposited
+  if (order.status === 0) order.status = 1;
+  return { ...entry, order_status: order.status };
 });
+
+// The API's rules: staff move one step forward, or cancel while Pending or Deposited;
+// the Super Admin sets any status, with a reason for anything else
+const FORWARD = { 0: 1, 1: 5, 5: 2, 2: 4 };
+const setStatus = (order, to, reason) => {
+  if (order.status === to) return;
+  const normal =
+    FORWARD[order.status] === to || (to === 3 && [0, 1].includes(order.status));
+  if (!normal) {
+    if (currentStaff().role !== "SUPER_ADMIN")
+      throw new MockError(
+        409,
+        to === 3
+          ? "Only Pending or Deposited orders can be cancelled. Ask a Super Admin to cancel it."
+          : "Move the order one step at a time (Pending → Deposited → Production → Shipped → Shipped + Paid). A Super Admin can make other changes.",
+      );
+    if (!reason?.trim())
+      throw new MockError(422, "Say why you're changing the status this way");
+  }
+  order.status = to;
+};
 
 on("POST", "/orders/:id/status", ({ params, body }) => {
   const order = findOrder(params.id);
-  order.status = Number(body.status);
+  setStatus(order, Number(body.status), body.reason);
   return { id: order.id, status: order.status };
 });
 
@@ -561,85 +707,151 @@ on("DELETE", "/orders/:id/lines/:lineId/extras/:extraId", ({ params }) => {
   return { deleted: true };
 });
 
+// One page for the order, and one link per physical item in it (db.js addProfile)
 on("POST", "/orders/:id/profile", ({ params }) => {
   const order = findOrder(params.id);
-  const missing = order.lines.filter(
-    (line) => !db.profiles.some((p) => p.line_id === line.id),
-  );
-  if (!missing.length) throw conflict("This order already has its profiles");
-  const created = missing.map(
-    (line) => addProfile(order, line, nowIso()).profile,
-  );
-  const links = created.reduce(
-    (count, p) =>
-      count + db.nfcItems.filter((i) => i.profile_id === p.id).length,
-    0,
-  );
+  if (db.profiles.some((p) => p.order_id === order.id))
+    throw conflict("This order already has its page");
+  const { profile, items } = addProfile(order, nowIso());
   logActivity(
-    "order.profiles_created",
+    "order.page_created",
     "order",
     order.id,
-    `${created.length} profile${created.length === 1 ? "" : "s"}, ${links} link${links === 1 ? "" : "s"}`,
+    `${items.length} link${items.length === 1 ? "" : "s"}`,
   );
-  return { profiles: created.map((p) => profileRow(order, p)) };
+  return { profiles: [profileRow(profile)] };
 });
+
+const findProfile = (id) => findOr404(db.profiles, id, "Page");
 
 on("POST", "/profiles/:id/items", ({ params, body }) => {
-  const profile = findOr404(db.profiles, params.id, "Profile");
+  const profile = findProfile(params.id);
   const label = String(body.label ?? "").trim();
-  if (!label) throw new MockError(422, "Enter a name for the new item");
-  const order = db.orders.find((o) => o.id === profile.order_id);
-  const line = order.lines.find((l) => l.id === profile.line_id);
-  const item = newNfcItem(profile.id, null, label, nowIso());
-  logActivity("nfc_item.added", "order", order.id, label);
-  return nfcItemRow(item, line);
+  if (!label) throw new MockError(422, "Enter the name on the new item");
+  const kind = body.kind ?? "card";
+  if (!["card", "keychain", "necklace", "bracelet"].includes(kind))
+    throw new MockError(422, "Unknown kind of item");
+  const item = newNfcItem(profile.id, null, kind, label, nowIso());
+  logPage("nfc_item.added", profile, itemName(item));
+  return nfcItemRow(item);
 });
 
+// How many people the page is for: never fewer than are in it
+on("POST", "/profiles/:id/seats", ({ params, body }) => {
+  const profile = findProfile(params.id);
+  const seats = Number(body.seats);
+  if (!Number.isInteger(seats) || seats < 1 || seats > 20)
+    throw new MockError(422, "Seats must be between 1 and 20");
+  if (seats < profile.member_ids.length)
+    throw new MockError(422, "There are more members than that");
+  profile.seats = seats;
+  logPage("page.seats_changed", profile, String(seats));
+  return profileRow(profile);
+});
+
+// Takes a member out (a dispute, an account given away): the items they had are
+// nobody's. With nobody left, the page closes
+on("DELETE", "/profiles/:id/members/:userId", ({ params }) => {
+  const profile = findProfile(params.id);
+  const userId = Number(params.userId);
+  if (!profile.member_ids.includes(userId)) throw notFound("Member");
+  profile.member_ids = profile.member_ids.filter((id) => id !== userId);
+  delete profile.joined_at[userId];
+  for (const item of db.nfcItems)
+    if (item.profile_id === profile.id && item.holder_user_id === userId)
+      setHolder(item, null);
+  if (!profile.member_ids.length) profile.state = "closed";
+  logPage("page.member_removed", profile, userRow(userId)?.username);
+  return profileRow(profile);
+});
+
+// The wrong person set it up (a courier, a relative who opened the box): no members,
+// no holders, no requests; the next tap of any of its items sets it up again
+on("POST", "/profiles/:id/reset", ({ params }) => {
+  const profile = findProfile(params.id);
+  profile.member_ids = [];
+  profile.joined_at = {};
+  profile.requests = [];
+  profile.claimed_at = null;
+  profile.state = "ready";
+  for (const item of db.nfcItems)
+    if (item.profile_id === profile.id) setHolder(item, null);
+  logPage("page.setup_reset", profile);
+  return profileRow(profile);
+});
+
+// A closed page (everyone left) opens again for its items; with no members, the next
+// tap sets it up
+on("POST", "/profiles/:id/reopen", ({ params }) => {
+  const profile = findProfile(params.id);
+  profile.state = "ready";
+  logPage("page.reopened", profile);
+  return profileRow(profile);
+});
+
+// A forgotten visitor PIN
+on("DELETE", "/profiles/:id/pin", ({ params }) => {
+  const profile = findProfile(params.id);
+  if (!profile.pin) throw conflict("This page has no PIN");
+  profile.pin = null;
+  logPage("page.pin_cleared", profile);
+  return profileRow(profile);
+});
+
+// "on", or "off": its link says it's turned off; the page and its other items go on
 on("POST", "/nfc-items/:id/status", ({ params, body }) => {
-  const found = findNfcItem(params.id);
-  if (!["active", "blocked"].includes(body.status))
-    throw new MockError(422, "Status must be active or blocked");
-  found.item.status = body.status;
-  logActivity(
-    body.status === "blocked" ? "nfc_item.blocked" : "nfc_item.unblocked",
-    "order",
-    found.order.id,
-    nfcItemName(found),
+  const { item, profile } = findNfcItem(params.id);
+  if (!["on", "off"].includes(body.status))
+    throw new MockError(422, "Status must be on or off");
+  item.status = body.status;
+  item.turned_off_by = body.status === "off" ? "staff" : null;
+  item.turned_off_at = body.status === "off" ? nowIso() : null;
+  logPage(
+    body.status === "off" ? "nfc_item.turned_off" : "nfc_item.turned_on",
+    profile,
+    itemName(item),
   );
-  return nfcItemRow(found.item, found.line);
+  return nfcItemRow(item);
 });
 
-on("POST", "/nfc-items/:id/disconnect", ({ params }) => {
-  const found = findNfcItem(params.id);
-  if (found.item.owner_user_id == null)
-    throw conflict("This item isn't connected to anyone");
-  found.item.owner_user_id = null;
-  found.item.connected_at = null;
-  logActivity(
-    "nfc_item.disconnected",
-    "order",
-    found.order.id,
-    nfcItemName(found),
-  );
-  return nfcItemRow(found.item, found.line);
+// Who has it: one of the page's members, or nobody. Only to know who has which item
+on("POST", "/nfc-items/:id/holder", ({ params, body }) => {
+  const { item, profile } = findNfcItem(params.id);
+  const userId = body.userId == null ? null : Number(body.userId);
+  if (userId != null && !profile.member_ids.includes(userId))
+    throw new MockError(422, "Only a member of the page can hold its items");
+  setHolder(item, userRow(userId), "changed", nowIso());
+  logPage("nfc_item.holder_changed", profile, itemName(item));
+  return nfcItemRow(item);
+});
+
+// Its taps, newest first
+on("GET", "/nfc-items/:id/opens", ({ params, query }) => {
+  const { item } = findNfcItem(params.id);
+  const rows = db.opens
+    .filter((open) => open.item_id === item.id)
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .map((open) => ({
+      id: open.id,
+      at: open.at,
+      member: open.user_id != null,
+      username: userRow(open.user_id)?.username ?? null,
+      source: open.source,
+    }));
+  return { rows: page(rows, Number(query.page) || 1, 20), total: rows.length };
 });
 
 on("POST", "/nfc-items/:id/replace-link", ({ params }) => {
-  const found = findNfcItem(params.id);
-  found.item.code = newItemCode();
-  logActivity(
-    "nfc_item.link_replaced",
-    "order",
-    found.order.id,
-    nfcItemName(found),
-  );
-  return nfcItemRow(found.item, found.line);
+  const { item, profile } = findNfcItem(params.id);
+  item.code = newItemCode();
+  logPage("nfc_item.link_replaced", profile, itemName(item));
+  return nfcItemRow(item);
 });
 
 on("DELETE", "/nfc-items/:id", ({ params }) => {
-  const found = findNfcItem(params.id);
-  logActivity("nfc_item.deleted", "order", found.order.id, nfcItemName(found));
-  removeFrom(db.nfcItems, found.item);
+  const { item, profile } = findNfcItem(params.id);
+  logPage("nfc_item.deleted", profile, itemName(item));
+  removeFrom(db.nfcItems, item);
   return { deleted: true };
 });
 
@@ -663,10 +875,72 @@ on("POST", "/orders/:id/shipments", ({ params, body }) => {
 on("POST", "/shipments/:id/status", ({ params, body }) => {
   const shipment = findOr404(db.shipments, params.id, "Shipment");
   shipment.status = body.status;
+  shipment.status_at = nowIso();
+  shipment.status_by = currentStaff().displayName ?? currentStaff().username;
   if (body.status === "returned" || body.status === "cancelled") {
     findOrder(shipment.order_id).shipping_id = null;
   }
   return shipment;
+});
+
+// The returned parcels, newest first (the API's GET /admin/returns)
+on("GET", "/returns", ({ query }) => {
+  const perPage = Math.min(100, Number(query.limit ?? query.per_page) || 25);
+  const page = Math.max(1, Number(query.page) || 1);
+  const term = String(query.search ?? "")
+    .trim()
+    .toLowerCase();
+  const rows = db.shipments
+    .filter((s) => s.status === "returned")
+    .map((s) => ({ s, order: findOrder(s.order_id) }))
+    .filter(
+      ({ order }) =>
+        !term ||
+        String(order.id).includes(term.replace(/^#/, "")) ||
+        order.full_name.toLowerCase().includes(term) ||
+        String(order.phone).includes(term),
+    )
+    .sort((a, b) =>
+      (b.s.status_at ?? b.s.created_at).localeCompare(
+        a.s.status_at ?? a.s.created_at,
+      ),
+    );
+  return {
+    returns: rows
+      .slice((page - 1) * perPage, page * perPage)
+      .map(({ s, order }) => {
+        const later = db.shipments.filter(
+          (o) => o.order_id === s.order_id && o.id > s.id,
+        );
+        const city = db.cities.find((c) => c.id === order.city_id);
+        return {
+          shipment_id: s.id,
+          carrier: s.carrier,
+          tracking_no: s.tracking_no,
+          cod_amount: s.cod_amount,
+          notes: s.notes,
+          returned_at: s.status_at ?? s.created_at,
+          returned_by: s.status_by ?? null,
+          reshipped:
+            later.find((o) => o.status === "delivered")?.status ??
+            later.find((o) => o.status === "active")?.status ??
+            null,
+          order: {
+            id: order.id,
+            public_ref: order.public_ref ?? null,
+            full_name: order.full_name,
+            phone: order.phone,
+            status: order.status,
+            grand_total: order.grand_total ?? null,
+            city: city?.name ?? null,
+            zone:
+              city?.zones?.find((z) => z.id === order.zone_id)?.name ?? null,
+          },
+        };
+      }),
+    total: rows.length,
+    per_page: perPage,
+  };
 });
 
 /* ------------------------------------------------------------------ */
@@ -983,16 +1257,29 @@ on("DELETE", "/coupons/:id", ({ params }) => {
 
 const findUser = (id) => findOr404(db.users, id, "Customer");
 
+// A customer by username: their old-system profile link (pid) if they have one, and
+// the pages they're in, with the items they hold in each
 on("GET", "/customers/lookup", ({ query }) => {
   const user = db.users.find((u) => u.username === query.username);
   if (!user) return { found: false };
-  if (!user.pid)
-    return { found: true, userId: user.id, link: null, themes: [] };
+  const pages = db.profiles
+    .filter((p) => p.member_ids.includes(user.id))
+    .map((p) => ({
+      id: p.id,
+      pid: p.pid,
+      order_id: p.order_id,
+      names: p.names,
+      legacy: p.legacy,
+      holds: db.nfcItems
+        .filter((i) => i.profile_id === p.id && i.holder_user_id === user.id)
+        .map(itemName),
+    }));
   return {
     found: true,
     userId: user.id,
-    link: profileLink(user.pid),
-    themes: themeStatuses(user),
+    link: user.pid ? profileLink(user.pid) : null,
+    themes: user.pid ? themeStatuses(user) : [],
+    pages,
   };
 });
 

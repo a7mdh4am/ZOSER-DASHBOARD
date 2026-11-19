@@ -20,6 +20,7 @@ const pageLoaders = Object.fromEntries(
     Finance: () => import("./pages/finance/index.jsx"),
     OrderDetail: () => import("./pages/order-detail/index.jsx"),
     Orders: () => import("./pages/Orders.jsx"),
+    Returns: () => import("./pages/Returns.jsx"),
     Products: () => import("./pages/products/index.jsx"),
     Roles: () => import("./pages/Roles.jsx"),
     Settings: () => import("./pages/Settings.jsx"),
@@ -40,6 +41,7 @@ const pageLoaders = Object.fromEntries(
 const PAGE_FOR_PATH = [
   ["/orders/", "OrderDetail"],
   ["/orders", "Orders"],
+  ["/returns", "Returns"],
   ["/designer", "Designer"],
   ["/customers", "Customers"],
   ["/themes", "Themes"],
@@ -78,6 +80,7 @@ const Designer = lazyPage("Designer");
 const Finance = lazyPage("Finance");
 const OrderDetail = lazyPage("OrderDetail");
 const Orders = lazyPage("Orders");
+const Returns = lazyPage("Returns");
 const Products = lazyPage("Products");
 const Roles = lazyPage("Roles");
 const Settings = lazyPage("Settings");
@@ -151,6 +154,7 @@ export default function App() {
         {can("orders.view") && (
           <Route path="/orders/:id" element={<OrderDetail />} />
         )}
+        {can("orders.view") && <Route path="/returns" element={<Returns />} />}
         {can("designer.view") && (
           <Route path="/designer" element={<Designer />} />
         )}

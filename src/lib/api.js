@@ -1,29 +1,24 @@
-// Thin fetch wrapper (JSON in/out, CSRF header on writes, 401 propagation)
-// plus every backend endpoint the admin app calls, grouped by domain.
-// Pages import the domain objects below (e.g. `ordersApi.list(...)`) —
-// nothing outside this file should call fetch() or the request() helper
-// directly.
+import axios from "axios";
+
+// The dashboard's connection to ZOSER's API (backend/, /api/v1/admin/*), plus every
+// endpoint the admin app calls, grouped by domain. Pages import the domain objects below
+// (e.g. `ordersApi.list(...)`) — nothing outside this file should make requests directly.
 //
-// Points at the Node backend (_backend, /api/v1/admin/*) — see
-// _frontend/vite.config.js's dev proxy and docs/API_MIGRATION_STATUS.md for
-// the PHP endpoints this replaced.
+// Sign-in gives a short access token, kept in memory only and sent as a bearer header,
+// and the API sets a long-lived refresh cookie (HttpOnly) for /auth/refresh. When the
+// access token runs out, one refresh (shared by every request that ran out together)
+// gets a new one and the request is tried again; when that fails, `zoser:unauthorized`
+// sends the app to sign-in.
 //
-// There's no backend to run yet, so the dev server answers these calls from
-// dummy data instead (./mock). Production builds still call the real API.
-// VITE_MOCK_API=true|false overrides this either way, e.g. for a demo build.
+// VITE_MOCK_API=true answers from dummy data instead (./mock, through an Axios adapter);
+// it's on by default in the dev server. VITE_API_URL: the API's address (default: this
+// site's own /api, which the dev server proxies to localhost:4000).
 const USE_MOCK = import.meta.env.VITE_MOCK_API
   ? import.meta.env.VITE_MOCK_API === "true"
   : import.meta.env.DEV;
 
-const send = USE_MOCK
-  ? async (url, opts) => (await import("dummy-api")).mockFetch(url, opts) // src/lib/mock (vite.config.js)
-  : (url, opts) => fetch(url, opts);
-
-let csrfToken = "";
-
-export function setCsrf(token) {
-  csrfToken = token || "";
-}
+const BASE = "/api/v1/admin";
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 export class ApiError extends Error {
   constructor(message, status, payload) {
@@ -33,132 +28,125 @@ export class ApiError extends Error {
   }
 }
 
-const BASE = "/api/v1/admin";
+let accessToken = null;
 
-async function request(method, url, body, retrying = false) {
-  const opts = {
-    method,
-    headers: { Accept: "application/json" },
-    credentials: "same-origin",
-  };
-
-  if (body !== undefined) {
-    opts.headers["Content-Type"] = "application/json";
-    opts.headers["X-CSRF-Token"] = csrfToken;
-    opts.body = JSON.stringify(body);
-  }
-
-  let res;
-  try {
-    res = await send(url, opts);
-  } catch {
-    throw new ApiError("Network error — check your connection", 0, null);
-  }
-
-  let data = null;
-  try {
-    data = await res.json();
-  } catch {
-    /* non-JSON error body */
-  }
-  const payload = data?.data ?? data;
-
-  if (!res.ok) {
-    if (!retrying && !url.startsWith(`${BASE}/auth/`)) {
-      // 401: 2h access token may just need a refresh-token rotation.
-      if (res.status === 401 && (await tryRefresh())) {
-        return request(method, url, body, true);
-      }
-    }
-    if (res.status === 401 && !url.startsWith(`${BASE}/auth/`)) {
-      window.dispatchEvent(new Event("zoser:unauthorized"));
-    }
-    const msg = data?.error?.message || `Request failed (${res.status})`;
-    throw new ApiError(msg, res.status, data?.error ?? null);
-  }
-
-  return payload;
+/** The access token from sign-in or a refresh (memory only). */
+export function setAccessToken(token) {
+  accessToken = token || null;
 }
+
+// The dummy API speaks fetch: this hands it each request and turns its Response back
+// into Axios's shape
+async function mockAdapter(config) {
+  const { mockFetch } = await import("dummy-api"); // src/lib/mock (vite.config.js)
+  const url = `${BASE}${config.url}`;
+  const isForm =
+    typeof FormData !== "undefined" && config.data instanceof FormData;
+  const res = await mockFetch(url, {
+    method: config.method.toUpperCase(),
+    headers: isForm ? {} : { "Content-Type": "application/json" },
+    body: config.data,
+  });
+  const type = res.headers?.get?.("Content-Type") ?? "";
+  const data =
+    config.responseType === "blob" && res.ok && !type.includes("json")
+      ? await res.blob()
+      : await res.json().catch(() => null);
+  const response = {
+    data,
+    status: res.status,
+    statusText: "",
+    headers: {},
+    config,
+    request: {},
+  };
+  if (res.ok) return response;
+  throw new axios.AxiosError("Request failed", null, config, null, response);
+}
+
+const http = axios.create({
+  baseURL: `${API_URL}${BASE}`,
+  withCredentials: true,
+  timeout: 60000,
+  ...(USE_MOCK ? { adapter: mockAdapter } : {}),
+});
+
+http.interceptors.request.use((config) => {
+  if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
+  return config;
+});
 
 let refreshPromise = null;
 
-/** Rotate the refresh token; concurrent 401s share one attempt. */
-async function tryRefresh() {
-  refreshPromise ??= (async () => {
-    try {
-      const res = await send(`${BASE}/auth/refresh`, {
-        method: "POST",
-        credentials: "same-origin",
-      });
-      return res.ok;
-    } catch {
-      return false;
-    } finally {
-      setTimeout(() => {
-        refreshPromise = null;
-      }, 0);
-    }
-  })();
-
+/** A new access token from the refresh cookie; concurrent callers share one attempt. */
+export function refreshSession() {
+  refreshPromise ??= http
+    .post("/auth/refresh", null, {
+      headers: { "X-ZSR-Client": "admin" },
+      _noRetry: true,
+    })
+    .then((res) => {
+      const session = res.data?.data ?? res.data;
+      setAccessToken(session?.accessToken);
+      return session;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
   return refreshPromise;
 }
 
-const apiGet = (path) => request("GET", `${BASE}${path}`);
-const apiPost = (path, body = {}) => request("POST", `${BASE}${path}`, body);
-const apiPatch = (path, body = {}) => request("PATCH", `${BASE}${path}`, body);
-const apiDelete = (path) => request("DELETE", `${BASE}${path}`);
-
-/** Multipart upload (FormData). CSRF header rides along; browser sets boundary. */
-async function apiUpload(path, formData) {
-  let res;
-  try {
-    res = await send(`${BASE}${path}`, {
-      method: "POST",
-      headers: { Accept: "application/json", "X-CSRF-Token": csrfToken },
-      credentials: "same-origin",
-      body: formData,
-    });
-  } catch {
-    throw new ApiError("Network error — check your connection", 0, null);
-  }
-
-  const data = await res.json().catch(() => null);
-  if (!res.ok) {
-    if (res.status === 401)
-      window.dispatchEvent(new Event("zoser:unauthorized"));
-    throw new ApiError(
-      data?.error?.message || `Upload failed (${res.status})`,
-      res.status,
-      data?.error ?? null,
-    );
-  }
-  return data?.data ?? data;
+async function toError(error) {
+  const res = error.response;
+  if (!res)
+    return new ApiError("Network error — check your connection", 0, null);
+  // A failed file download's body is the JSON envelope, as a Blob
+  const body =
+    res.data instanceof Blob
+      ? await res.data
+          .text()
+          .then((text) => JSON.parse(text))
+          .catch(() => null)
+      : res.data;
+  return new ApiError(
+    body?.error?.message || `Request failed (${res.status})`,
+    res.status,
+    body?.error ?? null,
+  );
 }
+
+http.interceptors.response.use(undefined, async (error) => {
+  const { config, response } = error;
+  const isAuth = config?.url?.startsWith("/auth/");
+  if (response?.status === 401 && !isAuth && !config._retried) {
+    config._retried = true;
+    try {
+      const session = await refreshSession();
+      if (session?.accessToken) return http(config);
+    } catch {
+      /* the session is over */
+    }
+    setAccessToken(null);
+    window.dispatchEvent(new Event("zoser:unauthorized"));
+  }
+  throw await toError(error);
+});
+
+const unwrap = (res) => res.data?.data ?? res.data;
+
+const apiGet = (path) => http.get(path).then(unwrap);
+const apiPost = (path, body = {}) => http.post(path, body).then(unwrap);
+const apiPut = (path, body = {}) => http.put(path, body).then(unwrap);
+const apiPatch = (path, body = {}) => http.patch(path, body).then(unwrap);
+const apiDelete = (path, body) =>
+  http.delete(path, body ? { data: body } : undefined).then(unwrap);
+
+/** Multipart upload (FormData); the browser sets the boundary. */
+const apiUpload = (path, formData) => http.post(path, formData).then(unwrap);
 
 /** GET a file (e.g. a CSV export) as a Blob. Errors still arrive as the JSON envelope. */
-async function apiFile(path) {
-  let res;
-  try {
-    res = await send(`${BASE}${path}`, {
-      headers: { Accept: "text/csv" },
-      credentials: "same-origin",
-    });
-  } catch {
-    throw new ApiError("Network error — check your connection", 0, null);
-  }
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    if (res.status === 401)
-      window.dispatchEvent(new Event("zoser:unauthorized"));
-    throw new ApiError(
-      data?.error?.message || `Download failed (${res.status})`,
-      res.status,
-      data?.error ?? null,
-    );
-  }
-  return res.blob();
-}
+const apiFile = (path) =>
+  http.get(path, { responseType: "blob" }).then((res) => res.data);
 
 /* ------------------------------------------------------------------ */
 /* auth                                                                */
@@ -166,9 +154,21 @@ async function apiFile(path) {
 
 export const authApi = {
   me: () => apiGet("/auth/me"),
-  refresh: () => apiPost("/auth/refresh"),
-  login: (username, password) => apiPost("/auth/login", { username, password }),
-  logout: () => apiPost("/auth/logout"),
+  /** { accessToken | null, admin | null }, from the refresh cookie */
+  refresh: () => refreshSession(),
+  /** { admin (with permissions), accessToken } */
+  login: async (username, password) => {
+    const result = await apiPost("/auth/login", { username, password });
+    setAccessToken(result.accessToken);
+    return result;
+  },
+  logout: async () => {
+    try {
+      await apiPost("/auth/logout");
+    } finally {
+      setAccessToken(null);
+    }
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -196,8 +196,13 @@ export const ordersApi = {
   get: (id) => apiGet(`/orders/${id}`),
   addDeposit: (orderId, value) =>
     apiPost(`/orders/${orderId}/deposits`, { value }),
+  /** Staff: the next step, or Cancelled while Pending or Deposited. The Super Admin:
+   *  any status, with a reason when it isn't one of those */
   updateStatus: (orderId, status, reason) =>
-    apiPost(`/orders/${orderId}/status`, { status: Number(status), reason }),
+    apiPost(`/orders/${orderId}/status`, {
+      status: Number(status),
+      reason: reason || undefined,
+    }),
   addNote: (orderId, formData) =>
     apiUpload(`/orders/${orderId}/notes`, formData),
   deleteNote: (orderId, noteId) =>
@@ -219,19 +224,73 @@ export const ordersApi = {
     apiPatch(`/orders/${orderId}/lines/${lineId}/extras/${extraId}`, body),
   deleteExtra: (orderId, lineId, extraId) =>
     apiDelete(`/orders/${orderId}/lines/${lineId}/extras/${extraId}`),
-  createProfile: (orderId) => apiPost(`/orders/${orderId}/profile`),
+  /** Makes the chips' codes now (moving to Production does too); safe to repeat */
+  provision: (orderId) => apiPost(`/orders/${orderId}/provision`),
+  /** Which items open which memory page; changeable until the codes are made */
+  groups: (orderId) => apiGet(`/orders/${orderId}/groups`),
+  setGroups: (orderId, units) => apiPut(`/orders/${orderId}/groups`, { units }),
   createShipment: (orderId, body) =>
     apiPost(`/orders/${orderId}/shipments`, body),
 };
 
-/** One physical NFC item (a card or keychain) and the link programmed on it. */
+/**
+ * Memory pages: who's in each (participants: a place named at checkout, waiting until its
+ * person taps their item and says it's theirs), which item is whose, and how often each
+ * opens. Customers claim by tapping; staff fix mistakes (a wrong claim, a lost card).
+ */
+export const profilesApi = {
+  get: (profileId) => apiGet(`/profiles/${profileId}`),
+  search: (term) => apiGet(`/profiles?search=${encodeURIComponent(term)}`),
+  addPerson: (profileId, body) =>
+    apiPost(`/profiles/${profileId}/participants`, body),
+  renamePerson: (participantId, displayName) =>
+    apiPatch(`/participants/${participantId}`, { displayName }),
+  /** Puts an account (by username) in a person's place */
+  assignPerson: (participantId, username) =>
+    apiPost(`/participants/${participantId}/assign`, { username }),
+  /** Takes the account out; the place waits for its person again */
+  unassignPerson: (participantId) =>
+    apiPost(`/participants/${participantId}/unassign`),
+  removePerson: (participantId) => apiDelete(`/participants/${participantId}`),
+  addItem: (profileId, body) => apiPost(`/profiles/${profileId}/items`, body),
+  reopen: (profileId) => apiPost(`/profiles/${profileId}/reopen`),
+  clearPin: (profileId) => apiDelete(`/profiles/${profileId}/pin`),
+  giverLink: (profileId) => apiPost(`/profiles/${profileId}/giver-link`),
+  merge: (profileId, fromProfileId, map = []) =>
+    apiPost(`/profiles/${profileId}/merge`, { fromProfileId, map }),
+  split: (profileId, itemIds) =>
+    apiPost(`/profiles/${profileId}/split`, { itemIds }),
+};
+
+/** One physical item (a card, keychain, necklace or bracelet) and the code on its chip. */
 export const nfcApi = {
-  add: (profileId, label) => apiPost(`/profiles/${profileId}/items`, { label }),
+  /** "active" or "off" */
   setStatus: (itemId, status) =>
     apiPost(`/nfc-items/${itemId}/status`, { status }),
-  disconnect: (itemId) => apiPost(`/nfc-items/${itemId}/disconnect`),
-  replaceLink: (itemId) => apiPost(`/nfc-items/${itemId}/replace-link`),
-  remove: (itemId) => apiDelete(`/nfc-items/${itemId}`),
+  /** Moves it to another person on its page (its owner follows) */
+  assign: (itemId, participantId) =>
+    apiPost(`/nfc-items/${itemId}/assign`, { participantId }),
+  opens: (itemId, days = 30) =>
+    apiGet(`/nfc-items/${itemId}/opens?days=${days}`),
+  /** A new code for a lost or broken one; the old one stops working */
+  replace: (itemId) => apiPost(`/nfc-items/${itemId}/replace`),
+  programmed: (itemId) => apiPost(`/nfc-items/${itemId}/programmed`),
+};
+
+/** The programming sheet: every chip to write, for orders in production (or `orderIds`) */
+export const productionApi = {
+  sheet: (orderIds = []) =>
+    apiGet(`/production/sheet?orders=${orderIds.join(",")}`),
+  sheetCsv: (orderIds = []) =>
+    apiFile(`/production/sheet?format=csv&orders=${orderIds.join(",")}`),
+  /** The printable page, as a Blob (it needs the sign-in, so it's fetched here) */
+  sheetPrint: (orderIds = []) =>
+    apiFile(`/production/sheet?format=print&orders=${orderIds.join(",")}`),
+};
+
+/** Parcels marked returned, newest first: { returns, total, per_page } */
+export const returnsApi = {
+  list: (params) => apiGet(`/returns?${new URLSearchParams(params)}`),
 };
 
 export const shipmentsApi = {
@@ -271,6 +330,15 @@ export const financeApi = {
 
 export const productsApi = {
   list: () => apiGet("/products"),
+  types: () => apiGet("/product-types"),
+  /** How many of a type one order line may have */
+  saveType: (code, minUnits, maxUnits) =>
+    apiPatch(`/product-types/${code}`, { minUnits, maxUnits }),
+  /** Stock: { status: "available" | "limited" | "out_of_stock" }, or name/hex */
+  updateColor: (colorId, body) => apiPatch(`/products/colors/${colorId}`, body),
+  /** The gallery's order: its pictures' ids, first to last */
+  setGallery: (productId, imageIds) =>
+    apiPut(`/products/${productId}/gallery`, { imageIds }),
   get: (id) => apiGet(`/products/${id}`),
   save: (id, form) =>
     id ? apiPatch(`/products/${id}`, form) : apiPost("/products", form),
@@ -307,6 +375,12 @@ export const couponsApi = {
 /* ------------------------------------------------------------------ */
 
 export const customersApi = {
+  list: (params) => apiGet(`/customers?${new URLSearchParams(params)}`),
+  get: (id) => apiGet(`/customers/${id}`),
+  block: (id, blocked) => apiPost(`/customers/${id}/block`, { blocked }),
+  /** Emails them a reset code (staff never see or type their password) */
+  sendReset: (id) => apiPost(`/customers/${id}/send-reset`),
+  /** Old-system accounts with no email only */
   create: (form) => apiPost("/customers", form),
   resetPassword: (id, newPassword) =>
     apiPost(`/customers/${id}/password-reset`, { newPassword }),

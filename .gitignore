@@ -26,3 +26,9 @@ dist-ssr
 # Playwright
 /test-results/
 /playwright-report/
+
+# Local settings (only the example is kept)
+.env
+.env.*
+!.env.example
+.vercel

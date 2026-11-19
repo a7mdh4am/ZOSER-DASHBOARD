@@ -34,20 +34,32 @@ export const PERMISSIONS = [
     code: "production.notes.delete",
     description: "Delete production notes from orders",
   },
+  {
+    code: "nfc.provision",
+    description: "Make the chips' codes and use the programming sheet",
+  },
   { code: "customers.view", description: "Open the Customers page" },
   {
     code: "users.view",
-    description: "Look up customer accounts and their profile links",
+    description: "Look up customer accounts, their pages and items",
   },
-  { code: "users.password.reset", description: "Reset a customer's password" },
+  {
+    code: "users.password.reset",
+    description: "Send a customer a reset code, or block an account",
+  },
   {
     code: "profiles.create",
-    description: "Create customer accounts and order profiles",
+    description: "Create old-style accounts and pages",
   },
   {
     code: "profiles.items.manage",
     description:
-      "Block, delete, disconnect, replace or add NFC items on a profile",
+      "Turn items on or off, move them to another person, replace or add items",
+  },
+  {
+    code: "profiles.participants.manage",
+    description:
+      "Fix who is in a page: names, wrong claims, people, merge, split, reopen, PIN",
   },
   {
     code: "profiles.themes.add",

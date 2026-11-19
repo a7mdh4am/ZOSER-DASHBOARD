@@ -12,7 +12,7 @@ import { CustomerCard } from "./CustomerCard.jsx";
 import { LineCard } from "./LineCard.jsx";
 import { NotesCard } from "./NotesCard.jsx";
 import { PaymentCard } from "./PaymentCard.jsx";
-import { ProfileCard } from "./ProfileCard.jsx";
+import { MemoryPagesCard } from "./MemoryPagesCard.jsx";
 import { ShipmentList, ShipmentModal } from "./Shipments.jsx";
 import { StatusCard } from "./StatusCard.jsx";
 
@@ -83,13 +83,7 @@ export default function OrderDetail() {
         <div className="stack">
           {/* Keyed by status: after a change it starts over on the saved status. */}
           <StatusCard key={order.status} order={order} onChanged={load} />
-          <ProfileCard
-            orderId={order.id}
-            lines={lines}
-            lineTitle={lineTitle}
-            profiles={profiles}
-            onChanged={load}
-          />
+          <MemoryPagesCard order={order} profiles={profiles} onChanged={load} />
 
           <div className="card">
             <div className="card-head">

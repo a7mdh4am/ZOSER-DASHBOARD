@@ -17,6 +17,7 @@ import {
   IconShield,
   IconSun,
   IconTag,
+  IconTruck,
   IconUser,
 } from "./Icons.jsx";
 
@@ -63,6 +64,7 @@ function useTheme() {
 const TITLES = [
   ["/orders/", "Order"],
   ["/orders", "Orders"],
+  ["/returns", "Returns"],
   ["/designer", "Design Studio"],
   ["/customers", "Customers"],
   ["/themes", "Themes"],
@@ -78,6 +80,7 @@ const TITLES = [
 const NAV = [
   ["/", "Dashboard", IconDashboard, "dashboard.view", true],
   ["/orders", "Orders", IconOrders, "orders.view", false],
+  ["/returns", "Returns", IconTruck, "orders.view", false],
   ["/designer", "Design Studio", IconPalette, "designer.view", false],
   ["/customers", "Customers", IconUser, "customers.view", false],
   ["/themes", "Themes", IconBrush, "themes.view", false],

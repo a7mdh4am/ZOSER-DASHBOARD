@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { authApi, setCsrf } from "../lib/api.js";
+import { authApi } from "../lib/api.js";
 import { hasPermission } from "../lib/permissions.js";
 import { AuthContext } from "./auth.js";
 
+// Who's signed in. The access token lives in memory (lib/api.js), so a new visit asks
+// the API for one from the refresh cookie first; until that answers, `ready` is false
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
@@ -10,21 +12,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     (async () => {
       try {
-        let data = await authApi.me();
-        setCsrf(data.csrfToken);
-        // Access token may have expired (2h) while the refresh token
-        // (2w) is still valid — rotate before deciding we're logged out.
-        // Node's /auth/me never auto-refreshes itself (unlike the request()
-        // wrapper's 401-retry, which never fires here since /me always 200s).
-        if (!data.admin) {
-          const refreshed = await authApi.refresh().catch(() => null);
-          if (refreshed?.refreshed) {
-            data = await authApi.me();
-          }
-        }
-        if (data.admin) setUser(data.admin);
+        const session = await authApi.refresh();
+        if (session?.accessToken && session.admin) setUser(session.admin);
       } catch {
-        /* offline */
+        /* signed out, or offline */
       } finally {
         setReady(true);
       }
@@ -36,15 +27,11 @@ export function AuthProvider({ children }) {
       window.removeEventListener("zoser:unauthorized", onUnauthorized);
   }, []);
 
-  // The CSRF cookie/token don't rotate on login/logout (only minted once,
-  // reused for the whole browser session) — no setCsrf() needed here.
+  // The login answer carries the admin with their permissions
   const login = useCallback(async (username, password) => {
-    await authApi.login(username, password);
-    // The login response omits `permissions` — re-fetch /me for the full
-    // permission set the rest of the app's `can()` checks depend on.
-    const me = await authApi.me();
-    setUser(me.admin);
-    return { user: me.admin };
+    const { admin } = await authApi.login(username, password);
+    setUser(admin);
+    return { user: admin };
   }, []);
 
   const logout = useCallback(async () => {

@@ -12,6 +12,14 @@ export const STATUS = {
 /** Order of statuses in filters and charts (workflow order). */
 export const STATUS_ORDER = ["0", "1", "5", "2", "4", "3"];
 
+/** The normal moves (as the API allows them): one step forward, or Cancelled while
+ *  Pending or Deposited. Anything else is the Super Admin's, with a reason */
+export const NEXT_STATUS = { 0: "1", 1: "5", 5: "2", 2: "4" };
+export const CANCELLABLE = ["0", "1"];
+export const isNormalMove = (from, to) =>
+  NEXT_STATUS[from] === String(to) ||
+  (String(to) === "3" && CANCELLABLE.includes(String(from)));
+
 export const statusOf = (s) =>
   STATUS[String(s)] ?? {
     label: "Unknown",

@@ -6,6 +6,7 @@ import { useToast } from "../../context/toast.js";
 import { useAction } from "../../hooks/useAction.js";
 import { ordersApi } from "../../lib/api.js";
 import { fmtDate } from "../../lib/format.js";
+import { IMAGE_ACCEPT, shrinkForUpload } from "../../lib/images.js";
 
 export function NotesCard({ orderId, notes, onChanged }) {
   const { can } = useAuth();
@@ -117,7 +118,12 @@ function NoteModal({ orderId, onClose, onDone }) {
     try {
       const fd = new FormData();
       fd.append("edits", edits);
-      files.forEach((f) => fd.append("photos", f));
+      // Up to 10 photos in one request: each kept small
+      for (const f of files)
+        fd.append(
+          "photos",
+          await shrinkForUpload(f, { limit: 400 * 1024, side: 1600 }),
+        );
       await ordersApi.addNote(orderId, fd);
       toast("Production note added");
       onDone();
@@ -162,7 +168,7 @@ function NoteModal({ orderId, onClose, onDone }) {
           <input
             className="input"
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
+            accept={`${IMAGE_ACCEPT},image/gif`}
             multiple
             onChange={(e) => setFiles(Array.from(e.target.files || []))}
           />

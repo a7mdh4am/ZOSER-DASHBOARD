@@ -1,11 +1,20 @@
-// Create or edit a design: details, then its cover image, colors and price tiers.
+// Create or edit a design: details and its type, then its gallery, colors and price tiers.
 
 import { useCallback, useEffect, useState } from "react";
 import { Can, Modal } from "../../components/ui.jsx";
 import { useToast } from "../../context/toast.js";
 import { useAction } from "../../hooks/useAction.js";
 import { productsApi } from "../../lib/api.js";
-import { CoverImageEditor, ColorsEditor, PricesEditor } from "./editors.jsx";
+import { ColorsEditor, GalleryEditor, PricesEditor } from "./editors.jsx";
+
+// What kind of product it is: cards and keychains come in 2 or more (one for each of
+// you), a necklace or bracelet is one gift for one person, on a page for two
+const TYPES = [
+  ["CARD", "NFC card"],
+  ["KEYCHAIN", "NFC keychain"],
+  ["NECKLACE", "Necklace (a gift)"],
+  ["BRACELET", "Bracelet (a gift)"],
+];
 
 const BLANK = {
   name: "",
@@ -16,6 +25,7 @@ const BLANK = {
   in_stock: true,
   is_limited: false,
   quantity: 999,
+  type: "CARD",
 };
 
 const slugify = (s) =>
@@ -34,6 +44,7 @@ const formFrom = (p) => ({
   in_stock: p.in_stock,
   is_limited: p.is_limited,
   quantity: p.quantity,
+  type: p.product_types?.code ?? "CARD",
 });
 
 export function ProductModal({ productId, onClose, onChanged }) {
@@ -92,6 +103,7 @@ export function ProductModal({ productId, onClose, onChanged }) {
           inStock: form.in_stock,
           isLimited: form.is_limited,
           quantity: Number(form.quantity) || 0,
+          typeCode: form.type,
         });
         // Retiring or reactivating a design has its own endpoint; the edit
         // body above doesn't carry it.
@@ -101,7 +113,7 @@ export function ProductModal({ productId, onClose, onChanged }) {
         await load(product.id);
       } else {
         const created = await productsApi.save(null, {
-          typeCode: "CARD",
+          typeCode: form.type,
           slug: form.slug,
           name: form.name,
           description: form.description,
@@ -175,6 +187,17 @@ export function ProductModal({ productId, onClose, onChanged }) {
           </label>
         </div>
 
+        <label className="field" style={{ maxWidth: 260 }}>
+          <span>Type</span>
+          <select className="input" value={form.type} onChange={set("type")}>
+            {TYPES.map(([code, label]) => (
+              <option key={code} value={code}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <label className="field">
           <span>Description (shop copy)</span>
           <textarea
@@ -216,13 +239,13 @@ export function ProductModal({ productId, onClose, onChanged }) {
 
         {product ? (
           <>
-            <CoverImageEditor product={product} onChanged={onPartsChanged} />
+            <GalleryEditor product={product} onChanged={onPartsChanged} />
             <ColorsEditor product={product} onChanged={onPartsChanged} />
             <PricesEditor product={product} onChanged={onPartsChanged} />
           </>
         ) : (
           <div className="small muted">
-            Create the design first, then add its cover image, colors and price
+            Create the design first, then add its pictures, colors and price
             tiers here.
           </div>
         )}

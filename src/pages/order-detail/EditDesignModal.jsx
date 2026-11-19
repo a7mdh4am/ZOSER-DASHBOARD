@@ -4,6 +4,12 @@ import { useToast } from "../../context/toast.js";
 import { useAction } from "../../hooks/useAction.js";
 import { ordersApi } from "../../lib/api.js";
 import { colorHex, countLabel } from "../../lib/format.js";
+import {
+  IMAGE_ACCEPT,
+  isHeic,
+  shrinkForUpload,
+  viewable,
+} from "../../lib/images.js";
 
 /**
  * Edit one order item's customization ("design"). Swapping the product
@@ -119,7 +125,13 @@ export function EditDesignModal({ orderId, line, products, onClose, onDone }) {
           items: cards.map((c) => ({ id: c.id, name: c.name, color: c.color })),
         }),
       );
-      for (const c of cards) if (c.file) data.append(`image_${c.id}`, c.file);
+      // Every card's picture in one request: each kept under 1 MB
+      for (const c of cards)
+        if (c.file)
+          data.append(
+            `image_${c.id}`,
+            await shrinkForUpload(c.file, { limit: 1024 * 1024, side: 2000 }),
+          );
       await ordersApi.updateDesign(orderId, line.id, data);
       toast("Design updated");
       onDone();
@@ -279,14 +291,21 @@ function CardImage({ card, name, followsColor, onChange }) {
     const file = e.target.files?.[0];
     e.target.value = ""; // so picking the same file again still counts
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast("Choose a PNG, JPG or WebP image", "err");
+    if (!file.type.startsWith("image/") && !isHeic(file)) {
+      toast("Choose a JPG, PNG, WebP or HEIC image", "err");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => onChange({ file, preview: reader.result });
-    reader.onerror = () => toast("Couldn't read that image", "err");
-    reader.readAsDataURL(file);
+    // The preview: a HEIC this browser can't show is converted for it (the file
+    // itself is uploaded as it is; the API converts it)
+    viewable(file).then(
+      (shown) => {
+        const reader = new FileReader();
+        reader.onload = () => onChange({ file, preview: reader.result });
+        reader.onerror = () => toast("Couldn't read that image", "err");
+        reader.readAsDataURL(shown);
+      },
+      () => toast("Couldn't read that image", "err"),
+    );
   };
 
   return (
@@ -299,7 +318,7 @@ function CardImage({ card, name, followsColor, onChange }) {
       <input
         ref={input}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept={IMAGE_ACCEPT}
         hidden
         onChange={pick}
       />

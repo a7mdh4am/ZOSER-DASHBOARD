@@ -9,34 +9,51 @@ import { useAction } from "../../hooks/useAction.js";
 import { productsApi } from "../../lib/api.js";
 import { money } from "../../lib/format.js";
 import { ProductImg } from "./ProductImg.jsx";
+import { IMAGE_ACCEPT, shrinkForUpload } from "../../lib/images.js";
 
-/** The shop-listing thumbnail — a single kind="gallery" image, no color. */
-export function CoverImageEditor({ product, onChanged }) {
+/**
+ * The design's gallery: its pictures in the shop's order (the first is its cover on the
+ * shop page). Add, remove, or move one earlier or later.
+ */
+export function GalleryEditor({ product, onChanged }) {
   const toast = useToast();
   const inputRef = useRef();
-  const cover = product.product_images.find(
-    (i) => i.kind === "gallery" && !i.color_id,
-  );
+  const pictures = product.product_images
+    .filter((i) => i.kind === "gallery" && !i.color_id)
+    .sort((a, b) => a.sort_order - b.sort_order);
 
   const [upload, busy] = useAction(async (e) => {
-    const picked = e.target.files?.[0];
+    const picked = [...(e.target.files ?? [])];
     e.target.value = "";
-    if (!picked) return;
     try {
-      const fd = new FormData();
-      fd.append("kind", "gallery");
-      fd.append("sortOrder", "0");
-      fd.append("file", picked);
-      await productsApi.uploadColorImage(product.id, fd);
+      for (const [i, file] of picked.entries()) {
+        const fd = new FormData();
+        fd.append("kind", "gallery");
+        fd.append("sortOrder", String(pictures.length + i));
+        fd.append("file", await shrinkForUpload(file));
+        await productsApi.uploadColorImage(product.id, fd);
+      }
       onChanged();
     } catch (err) {
       toast(err.message, "err");
     }
   });
 
-  const [clear] = useAction(async () => {
+  const [remove] = useAction(async (picture) => {
     try {
-      await productsApi.deleteColorImage(cover.id);
+      await productsApi.deleteColorImage(picture.id);
+      onChanged();
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
+
+  const [move] = useAction(async (index, by) => {
+    const ids = pictures.map((p) => p.id);
+    const [moved] = ids.splice(index, 1);
+    ids.splice(index + by, 0, moved);
+    try {
+      await productsApi.setGallery(product.id, ids);
       onChanged();
     } catch (err) {
       toast(err.message, "err");
@@ -45,9 +62,49 @@ export function CoverImageEditor({ product, onChanged }) {
 
   return (
     <div>
-      <div className="section-label">COVER IMAGE (shop listing)</div>
-      <div className="row" style={{ alignItems: "center" }}>
-        <ProductImg url={cover?.image_url} size={56} />
+      <div className="section-label">
+        GALLERY ({pictures.length}) — the first is the cover
+      </div>
+      <div className="row wrap gap-10" style={{ alignItems: "flex-start" }}>
+        {pictures.map((picture, i) => (
+          <div
+            key={picture.id}
+            className="stack gap-4"
+            style={{ alignItems: "center" }}
+          >
+            <ProductImg url={picture.image_url} size={64} />
+            <Can perm="catalog.products.update">
+              <div className="row gap-4">
+                <button
+                  type="button"
+                  className="btn sm ghost icon"
+                  aria-label="Earlier"
+                  disabled={i === 0}
+                  onClick={() => move(i, -1)}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  className="btn sm ghost icon"
+                  aria-label="Remove picture"
+                  onClick={() => remove(picture)}
+                >
+                  <IconX size={12} />
+                </button>
+                <button
+                  type="button"
+                  className="btn sm ghost icon"
+                  aria-label="Later"
+                  disabled={i === pictures.length - 1}
+                  onClick={() => move(i, 1)}
+                >
+                  ›
+                </button>
+              </div>
+            </Can>
+          </div>
+        ))}
         <Can perm="catalog.products.update">
           <button
             type="button"
@@ -55,18 +112,14 @@ export function CoverImageEditor({ product, onChanged }) {
             onClick={() => inputRef.current?.click()}
             disabled={busy}
           >
-            {busy ? "Uploading…" : cover ? "Replace" : "Upload"}
+            <IconPlus size={13} /> {busy ? "Uploading…" : "Add pictures"}
           </button>
-          {cover && (
-            <button type="button" className="btn sm ghost" onClick={clear}>
-              Remove
-            </button>
-          )}
         </Can>
         <input
           ref={inputRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
+          accept={`${IMAGE_ACCEPT},image/gif`}
+          multiple
           hidden
           onChange={upload}
         />
@@ -74,6 +127,13 @@ export function CoverImageEditor({ product, onChanged }) {
     </div>
   );
 }
+
+// A colour's stock, as the shop shows it
+const STOCK = {
+  available: "In stock",
+  limited: "Limited",
+  out_of_stock: "Out of stock",
+};
 
 export function ColorsEditor({ product, onChanged }) {
   const toast = useToast();
@@ -87,6 +147,16 @@ export function ColorsEditor({ product, onChanged }) {
       await productsApi.addColor(product.id, { name: name.trim(), hex });
       setName("");
       toast("Color added");
+      onChanged();
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
+
+  const [setStock] = useAction(async (c, status) => {
+    try {
+      await productsApi.updateColor(c.id, { status });
+      toast(`${c.name}: ${STOCK[status]}`);
       onChanged();
     } catch (err) {
       toast(err.message, "err");
@@ -136,6 +206,18 @@ export function ColorsEditor({ product, onChanged }) {
             )}
             <div className="grow" />
             <Can perm="catalog.products.update">
+              <select
+                className="input sm"
+                aria-label={`${c.name} stock`}
+                value={c.status ?? "available"}
+                onChange={(e) => setStock(c, e.target.value)}
+              >
+                {Object.entries(STOCK).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 className="btn sm ghost icon"
@@ -204,7 +286,7 @@ function ColorImage({ productId, color, images, side, onChanged }) {
       fd.append("colorId", String(color.id));
       fd.append("kind", side);
       fd.append("sortOrder", "0");
-      fd.append("file", picked);
+      fd.append("file", await shrinkForUpload(picked));
       await productsApi.uploadColorImage(productId, fd);
       toast(`${side === "back" ? "Back" : "Front"} image saved`);
       onChanged();
@@ -253,7 +335,7 @@ function ColorImage({ productId, color, images, side, onChanged }) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept={IMAGE_ACCEPT}
         hidden
         onChange={upload}
       />
